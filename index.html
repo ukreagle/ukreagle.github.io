@@ -1,0 +1,1669 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Парсер формулярів</title>
+    <style>
+        :root {
+            --primary: #1e3a8a;
+            --primary-hover: #172554;
+            --accent: #2563eb;
+            --accent-light: #dbeafe;
+            --success: #15803d;
+            --success-bg: #dcfce7;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --border-color: #cbd5e1;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.5;
+            padding: 24px 16px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+            color: #ffffff;
+            padding: 24px 28px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-title-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 6px;
+        }
+
+        .badge-icon {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 24px;
+        }
+
+        h1 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        header p {
+            color: #cbd5e1;
+            font-size: 0.95rem;
+            margin-left: 56px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .card-title {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .hint {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        textarea {
+            width: 100%;
+            height: auto;
+            min-height: 380px;
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            line-height: 1.5;
+            padding: 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: #fafafa;
+            color: var(--text-main);
+            resize: vertical;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+        }
+
+        textarea:focus {
+            border-color: var(--accent);
+            background-color: #ffffff;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+
+        .actions-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 14px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 0.92rem;
+            font-weight: 500;
+            padding: 10px 18px;
+            border-radius: 8px;
+            border: 1px solid transparent;
+            transition: all 0.15s ease-in-out;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary {
+            background-color: var(--accent);
+            color: #ffffff;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary);
+        }
+
+        .btn-secondary {
+            background-color: #f1f5f9;
+            color: #334155;
+            border-color: #cbd5e1;
+        }
+
+        .btn-secondary:hover {
+            background-color: #e2e8f0;
+            color: #0f172a;
+        }
+
+        .btn-outline {
+            background-color: transparent;
+            border-color: #cbd5e1;
+            color: #64748b;
+        }
+
+        .btn-outline:hover {
+            background-color: #fee2e2;
+            color: #b91c1c;
+            border-color: #fca5a5;
+        }
+
+        .btn-copy {
+            background-color: var(--success);
+            color: #ffffff;
+            font-weight: 600;
+            padding: 10px 20px;
+        }
+
+        .btn-copy:hover {
+            background-color: #166534;
+        }
+
+        /* Results Area */
+        #resultsArea {
+            display: none;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background-color: var(--success-bg);
+            color: var(--success);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        /* Full 32 columns Table */
+        .table-wrapper {
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: #ffffff;
+            margin-bottom: 14px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.88rem;
+            white-space: nowrap;
+        }
+
+        th {
+            background-color: #f1f5f9;
+            color: #334155;
+            font-weight: 600;
+            text-align: left;
+            padding: 10px 14px;
+            border-bottom: 2px solid var(--border-color);
+            border-right: 1px solid #e2e8f0;
+            position: sticky;
+            top: 0;
+        }
+
+        td {
+            padding: 10px 14px;
+            border-bottom: 1px solid #e2e8f0;
+            border-right: 1px solid #e2e8f0;
+            color: var(--text-main);
+        }
+
+        tr:nth-child(even) td {
+            background-color: #f8fafc;
+        }
+
+        tr:hover td {
+            background-color: #f1f5f9;
+        }
+
+        .cell-empty {
+            color: #94a3b8;
+            font-style: italic;
+        }
+
+        .cell-val {
+            font-weight: 500;
+        }
+
+        /* Logical group cards */
+        .grid-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .summary-block {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 14px 16px;
+        }
+
+        .summary-block-title {
+            font-size: 0.82rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            font-weight: 700;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .prop-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.86rem;
+            padding: 4px 0;
+            border-bottom: 1px dashed #e2e8f0;
+        }
+
+        .prop-row:last-child {
+            border-bottom: none;
+        }
+
+        .prop-name {
+            color: var(--text-muted);
+        }
+
+        .prop-val {
+            font-weight: 600;
+            color: var(--text-main);
+            text-align: right;
+            max-width: 65%;
+            word-break: break-word;
+        }
+
+        /* CSV Output Section */
+        .csv-box {
+            background-color: #0f172a;
+            color: #f8fafc;
+            border-radius: 8px;
+            padding: 14px;
+            font-family: var(--font-mono);
+            font-size: 0.88rem;
+            word-break: break-all;
+            margin-bottom: 14px;
+            max-height: 140px;
+            overflow-y: auto;
+            border: 1px solid #334155;
+            line-height: 1.6;
+        }
+
+        .table-toolbar,
+        .csv-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .checkbox-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            color: var(--text-main);
+            user-select: none;
+        }
+
+        .checkbox-label input {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #0f172a;
+            color: #ffffff;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 0.92rem;
+            font-weight: 500;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.25s ease-in-out;
+            pointer-events: none;
+            z-index: 999;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        @media (max-width: 640px) {
+            header p {
+                margin-left: 0;
+                margin-top: 6px;
+            }
+            .actions-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .btn-group {
+                flex-direction: column;
+            }
+            button {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Header -->
+    <header>
+        <div class="header-title-row">
+            <h1>Парсер формулярів</h1>
+        </div>
+    </header>
+
+    <!-- Input Card -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">
+                <span>Формуляр</span>
+            </div>
+        </div>
+
+        <textarea id="inputText" rows="20" placeholder="Текст формуляру застосування..."></textarea>
+
+        <div class="actions-row">
+            <div class="btn-group">
+                <button type="button" class="btn-primary" id="btnParse">
+                    <span>⚡ Парсинг</span>
+                </button>
+            </div>
+            <div>
+                <button type="button" class="btn-outline" id="btnClear">
+                    <span>🗑️ Очистити</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Section -->
+    <div id="resultsArea">
+        <!-- Status indicator -->
+        <div id="statusBadge" class="status-badge">
+            ✓ Формуляр успішно оброблено
+        </div>
+
+        <!-- Full Horizontal Table Form -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <span>Таблична форма</span>
+                </div>
+            </div>
+
+            <div class="table-wrapper">
+                <table id="fullTable">
+                    <thead>
+                        <tr id="tableHeaders"></tr>
+                    </thead>
+                    <tbody>
+                        <tr id="tableDataRow"></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="table-toolbar">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="chkIncludeTableHeader" checked>
+                    <span>Додати рядок із назвами колонок</span>
+                </label>
+
+                <div class="btn-group">
+                    <button type="button" class="btn-copy" id="btnCopyTable">
+                        <span>📋 Скопіювати у буфер обміну</span>
+                    </button>
+                    <button type="button" class="btn-secondary" id="btnDownloadXlsx">
+                        <span>📊 Завантажити .xlsx</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Comma-Separated Values (CSV Row) -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <span>Значення через кому (CSV рядок)</span>
+                </div>
+            </div>
+
+            <div class="csv-box" id="csvOutput"></div>
+
+            <div class="csv-toolbar">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="chkIncludeHeader">
+                    <span>Додати рядок із назвами колонок</span>
+                </label>
+
+                <div class="btn-group">
+                    <button type="button" class="btn-copy" id="btnCopyCsv">
+                        <span>📋 Скопіювати у буфер обміну</span>
+                    </button>
+                    <button type="button" class="btn-secondary" id="btnDownloadCsv">
+                        <span>💾 Завантажити .csv</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast notification -->
+<div class="toast" id="toastMessage">✓ Скопійовано у буфер обміну!</div>
+
+<!-- JS Parser Logic -->
+<script>
+
+const COLUMNS = [
+    "Дата",
+    "Час",
+    "Населений пункт",
+    "Область",
+    "Назва групи",
+    "Азимут",
+    "Курс",
+    "Дальність",
+    "Висота",
+    "Тип цілі",
+    "Номер цілі",
+    "Результат",
+    "23х152 ОФЗ",
+    "23х152 БЗТ",
+    "14,5х114 МДЗ",
+    "14,5х114 БЗТ",
+    "14,5х114 Б-32",
+    "12,7х99",
+	"12/76",
+    "7,62 ПС",
+    "7,62 Т",
+    "5,45 ПС",
+    "5,45 Т",
+    "ЗКР Stinger",
+    "НБЖ Stinger",
+    "ЗКР Ігла",
+    "НБЖ Ігла",
+    "Коментар",
+    "Склад групи №1",
+    "Склад групи №2",
+    "Склад групи №3",
+    "Склад групи №4",
+    "Склад групи №5"
+];
+
+function cleanVal(val) {
+    if (val === null || val === undefined) return "";
+    let v = String(val).trim();
+    if (/(?:^|[\s.])[А-ЯЄІЇҐA-Z]\.$/.test(v)) {
+        v = v.replace(/^[,\-–—:.\s;]+|[,\-–—:\s;]+$/g, "");
+    } else {
+        v = v.replace(/^[,\-–—:.\s;]+|[,\-–—:.\s;]+$/g, "");
+    }
+    v = v.replace(/[ \t]+/g, " ");
+    return v.trim();
+}
+
+function splitFormulars(content) {
+    const lines = content.split(/\r?\n/);
+    const starts = [];
+
+    for (let i = 0; i < lines.length; i++) {
+        const l = lines[i].trim();
+        if (!l) continue;
+
+        if (/^Дата\s*:/i.test(l)) {
+            starts.push(i);
+        } else if (/^\(?\s*1\s*[).:]/i.test(l)) {
+            if (!/^\d+:\d+$/.test(l)) {
+                starts.push(i);
+            }
+        } else if (/^\)?\s*Час\s*[:.\s]*\d+.*Дата/i.test(l)) {
+            starts.push(i);
+        } else if (/^\)\s*Час/i.test(l)) {
+            starts.push(i);
+        }
+    }
+
+    const formulars = [];
+    for (let idx = 0; idx < starts.length; idx++) {
+        const s = starts[idx];
+        const e = (idx + 1 < starts.length) ? starts[idx + 1] : lines.length;
+        const block = lines.slice(s, e).join("\n").trim();
+        if (block) {
+            formulars.push(block);
+        }
+    }
+
+    if (formulars.length === 0 && content.trim()) {
+        formulars.push(content.trim());
+    }
+
+    return formulars;
+}
+
+function parseAmmo(fullText, lines) {
+    const ammo = {
+        "23х152 ОФЗ": "",
+        "23х152 БЗТ": "",
+        "14,5х114 МДЗ": "",
+        "14,5х114 БЗТ": "",
+        "14,5х114 Б-32": "",
+        "12,7х99": "",
+		"12/76": "",
+        "7,62 ПС": "",
+        "7,62 Т": "",
+        "5,45 ПС": "",
+        "5,45 Т": "",
+        "ЗКР Stinger": "",
+        "НБЖ Stinger": "",
+        "ЗКР Ігла": "",
+        "НБЖ Ігла": ""
+    };
+
+    // Зброя для визначення типу ПЗРК
+    const weaponM = fullText.match(/Зброя[:\s]+([^\n\r]+)/i);
+    const weaponStr = weaponM ? weaponM[1].toLowerCase() : "";
+
+    // Розхід ЗКР та НБЖ
+    const zkrM = fullText.match(/(?:Розхід|Росхід|витрат[аи]?\s*БК[:\s]*)\s*ЗКР[\s\-]+(\d+)/i);
+    const nbzhM = fullText.match(/(?:(?:Розхід|Росхід)[:\s\-]*|витрат[аи]?\s*БК[:\s]*)\s*(\d+)?\s*(?:НБЖ|Ндж)[\s\-]*(\d+)?/i);
+
+    const zkrCnt = zkrM ? parseInt(zkrM[1], 10) : 0;
+    let nbzhCnt = 0;
+    if (nbzhM) {
+        const val = nbzhM[1] || nbzhM[2];
+        if (val && /^\d+$/.test(val)) {
+            nbzhCnt = parseInt(val, 10);
+        }
+    }
+
+    if (weaponStr.includes("stinger")) {
+        if (zkrCnt) ammo["ЗКР Stinger"] = zkrCnt;
+        if (nbzhCnt) ammo["НБЖ Stinger"] = nbzhCnt;
+    } else if (weaponStr.includes("ігла") || weaponStr.includes("игла")) {
+        if (zkrCnt) ammo["ЗКР Ігла"] = zkrCnt;
+        if (nbzhCnt) ammo["НБЖ Ігла"] = nbzhCnt;
+    }
+
+    // Виділення рядків секції БК
+    const ammoLines = [];
+    let inAmmoSection = false;
+
+    for (const line of lines) {
+        if (/Витрат[аи]?\s*БК|Витра\s*б\/к/i.test(line)) {
+            inAmmoSection = true;
+            ammoLines.push(line);
+            continue;
+        }
+        if (/^Набій|^Розхід|^Росхід/i.test(line)) {
+            ammoLines.push(line);
+            continue;
+        }
+        if (inAmmoSection) {
+            if (/^\d+[).]\s*(?:Результат|Особовий|О\/с|ст\.|солд|гол\.|к[-.]?н|мл\.|мол\.|Обʼєкт|не\s*знищено|знищено)/i.test(line)) {
+                inAmmoSection = false;
+            } else if (/^\d+:\d+$|^[а-я]{2},\s*\d+/i.test(line)) {
+                inAmmoSection = false;
+            } else {
+                ammoLines.push(line);
+            }
+        } else {
+            if (/(?:12[.,]7|12\s*[\/хx×]\s*7[06]|12\s*кал|картеч|дріб|14[.,]5|23\s*[хx]|7[.,]62|5[.,]45)[^\n\r]*?[\-–—:]\s*\d+/i.test(line)) {
+                if (!/^(?:Зброя|Засіб)/i.test(line)) {
+                    ammoLines.push(line);
+                }
+            }
+        }
+    }
+
+    const ammoText = ammoLines.join("\n");
+
+    // 1. 23х152
+    const m23Ofz = ammoText.match(/23\s*[хx]\s*152[^\n\r]*ОФЗ[^\d\n\r]*[\-–—:]\s*(\d+)/i);
+    if (m23Ofz) ammo["23х152 ОФЗ"] = parseInt(m23Ofz[1], 10);
+
+    const m23Bzt = ammoText.match(/23\s*[хx]\s*152[^\n\r]*БЗТ[^\d\n\r]*[\-–—:]\s*(\d+)/i);
+    if (m23Bzt) ammo["23х152 БЗТ"] = parseInt(m23Bzt[1], 10);
+
+    // 2. 14,5х114
+    const m14Mdz = ammoText.match(/14[.,]5\s*[хx]\s*114[^\n\r]*МДЗ[^\d\n\r]*[\-–—:]\s*(\d+)/i);
+    if (m14Mdz) ammo["14,5х114 МДЗ"] = parseInt(m14Mdz[1], 10);
+
+    const m14Bzt = ammoText.match(/14[.,]5\s*[хx]\s*114[^\n\r]*БЗТ[^\d\n\r]*[\-–—:]\s*(\d+)/i);
+    if (m14Bzt) ammo["14,5х114 БЗТ"] = parseInt(m14Bzt[1], 10);
+
+    const m14B32 = ammoText.match(/14[.,]5\s*[хx]\s*114[^\n\r]*Б-?32[^\d\n\r]*[\-–—:]\s*(\d+)/i);
+    if (m14B32) ammo["14,5х114 Б-32"] = parseInt(m14B32[1], 10);
+
+    // 3. 12,7х99
+    let total127 = 0;
+    let found127 = false;
+    for (const line of ammoLines) {
+        const re127 = /(?:12[.,]7\s*[хx×]\s*99(?:\s*мм)?|12[.,]7\s*мм|12[.,]70?)[^\d\n\r]*?[\-–—:]\s*(\d+)/gi;
+        let m;
+        while ((m = re127.exec(line)) !== null) {
+            total127 += parseInt(m[1], 10);
+            found127 = true;
+        }
+    }
+    if (found127) {
+        ammo["12,7х99"] = total127;
+    }
+
+    // 4. 12/76
+    let total1276 = 0;
+    let found1276 = false;
+    for (const line of ammoLines) {
+        const re1276 = /(?:(?:12\s*[\/хx×]\s*7[06]|12\s*кал(?:\.|ібр)?|наб[оії]+\s+12[\/х]7[06]|картеч|дріб)(?:\s*мм)?)[^\d\n\r]*?[\-–—:]\s*(\d+)/gi;
+        let m;
+        while ((m = re1276.exec(line)) !== null) {
+            total1276 += parseInt(m[1], 10);
+            found1276 = true;
+        }
+    }
+    if (found1276) {
+        ammo["12/76"] = total1276;
+    }
+
+    // 4. 7,62
+    let total762Ps = 0;
+    let total762T = 0;
+    let found762 = false;
+    for (const line of ammoLines) {
+        const re762 = /(?:7[.,]62\s*[хx×]\s*39(?:\s*мм)?|7[.,]62\s*мм|7[.,]62)[^\d\n\r]*?(?:(ПС)|(Т|ТР|ТЗ))?[^\d\n\r]*[\-–—:]\s*(\d+)/gi;
+        let m;
+        while ((m = re762.exec(line)) !== null) {
+            const isT = m[2];
+            const val = parseInt(m[3], 10);
+            if (isT) {
+                total762T += val;
+            } else {
+                total762Ps += val;
+            }
+            found762 = true;
+        }
+    }
+    if (found762) {
+        if (total762Ps) ammo["7,62 ПС"] = total762Ps;
+        if (total762T) ammo["7,62 Т"] = total762T;
+    }
+
+    // 5. 5,45
+    // Шукаємо комбо на одному рядку (наприклад '5.45 - 30шт. 20пс. 10пт.' або '40шт п/с : 20шт т/п')
+    let comboM = null;
+    for (const line of ammoLines) {
+        const cm = line.match(/5[.,]45[^\n\r]*?(?:(\d+)\s*(?:шт\.?\s*)?п[\/.]?с|п[\/.]?с[^\d\n\r]*(\d+))[^\n\r]*?(?:(\d+)\s*(?:шт\.?\s*)?(?:т[\/.]?п|пт|тр|тз|т(?![а-яa-z]))|(?:т[\/.]?п|пт|тр|тз|т(?![а-яa-z]))[^\d\n\r]*(\d+))/i);
+        if (cm) {
+            comboM = cm;
+            break;
+        }
+    }
+
+    if (comboM) {
+        const psV = comboM[1] !== undefined ? comboM[1] : comboM[2];
+        const tV = comboM[3] !== undefined ? comboM[3] : comboM[4];
+        ammo["5,45 ПС"] = (psV !== undefined && psV !== null && psV !== "") ? parseInt(psV, 10) : "";
+        ammo["5,45 Т"] = (tV !== undefined && tV !== null && tV !== "") ? parseInt(tV, 10) : "";
+    } else {
+        let totPs = 0;
+        let totT = 0;
+        let found545 = false;
+
+        for (const line of ammoLines) {
+            const mPs = line.match(/(?:5[.,]45[^\n\r]*?ПС|^ПС)[^\d\n\r]*[\-–—:]\s*(\d+)/i);
+            if (mPs) {
+                totPs += parseInt(mPs[1], 10);
+                found545 = true;
+            }
+            const mT = line.match(/(?:5[.,]45[^\n\r]*?(?:ТР|ТЗ|Т(?![а-яa-z]))|^(?:ТР|ТЗ|Т(?![а-яa-z])))[^\d\n\r]*[\-–—:]\s*(\d+)/i);
+            if (mT) {
+                totT += parseInt(mT[1], 10);
+                found545 = true;
+            }
+            if (!mPs && !mT) {
+                const mGen = line.match(/5[.,]45(?:\s*[хx×]\s*39)?(?:\s*мм)?[^\d\n\r]*[\-–—:]\s*(\d+)/i);
+                if (mGen) {
+                    totPs += parseInt(mGen[1], 10);
+                    found545 = true;
+                }
+            }
+        }
+
+        if (found545) {
+            ammo["5,45 ПС"] = totPs;
+            ammo["5,45 Т"] = totT;
+        }
+    }
+
+    return ammo;
+}
+
+function extractGroupName(fullText) {
+    // 1. Позивний
+    const pozM = fullText.match(/(?:(?:^|\n)\s*Позивний[:\s\-]+)([^\n\r]+)/i);
+    if (pozM) {
+        let val = pozM[1].trim();
+        val = val.replace(/["']/g, "").trim();
+        return cleanVal(val);
+    }
+
+    // 2. Рядок з МВГ або ВГ
+    const mvgM = fullText.match(/(?:^|\n)\s*(?:\d+[).]\s*)?(?:МВГ|ВГ)[:\s\-]+([^\n\r]+)/i);
+    if (mvgM) {
+        let val = mvgM[1].trim();
+        val = val.replace(/["']/g, "").trim();
+        return cleanVal(val);
+    }
+
+    // 3. Пункт 5 списку
+    const item5M = fullText.match(/(?:^|\n)\s*5[).]\s*[\-–]?\s*([^\n\r]+)/i);
+    if (item5M) {
+        let val = item5M[1].trim();
+        if (!/^(?:Азимут|Курс|Дальність|Відстань|Висота|Тип|Номер|Зброя|Результат)/i.test(val)) {
+            val = val.replace(/["']/g, "").trim();
+            return cleanVal(val);
+        }
+    }
+
+    return "";
+}
+
+function extractPersonnel(fullText, lines) {
+    const people = [];
+    const rankDelimiter = /[,;]\s*(?=(?:г[\-.]?л|ген|п[\-\.]*к|п\.п[\-.]*к|м[\-.]*р|майор|полковник|підполковник|к[\-\.\s]*н|капітан|ст|мол|мл|гл|сол|солд|с[\-\.]*нт|с[\-\.]*т|лейтенант|л[\-.]?т|сержант))/i;
+
+    // 1. Спеціальний заголовок 'Особовий склад:' або 'О/с:'
+    const osM = fullText.match(/(?:(?:^|\n)\s*(?:\d+[).]*\s*)?(?:Особовий склад|О\/с)[:\s]+)([^\n\r]+)/i);
+    if (osM) {
+        const rawOs = osM[1];
+        const items = rawOs.split(rankDelimiter);
+        for (let it of items) {
+            it = cleanVal(it);
+            if (it && !people.includes(it)) {
+                people.push(it);
+            }
+        }
+    }
+
+    // 2. Нумеровані пункти особового складу
+    if (people.length === 0) {
+        for (const line of lines) {
+            const mP = line.match(/^\d+[).]*\s*(?:(?:гол|ст|мол|мл|гл)?[\.\s]*(?:с[\-.]?нт|с[\-.]?т|солд|солдат|сол|к[\-.]?н|капітан|сержант|навідник|командир|п[\-\.]*к|п\.п[\-.]*к|м[\-.]*р|майор|полковник|підполковник|лейтенант|л[\-.]?т)[\.\s]*[^\n\r]+)/i);
+            if (mP) {
+                const val = line.replace(/^\d+[).]*\s*/, "").trim();
+                const subPeeps = val.split(rankDelimiter);
+                for (let sp of subPeeps) {
+                    sp = cleanVal(sp);
+                    if (sp && !people.includes(sp)) {
+                        people.push(sp);
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Рядки після 'Результат'
+    if (people.length === 0) {
+        let foundRes = false;
+        for (const line of lines) {
+            if (/Результат/i.test(line)) {
+                foundRes = true;
+                continue;
+            }
+            if (foundRes) {
+                if (/^\d+:\d+$|^[а-я]{2},\s*\d+|Змінено\d+/i.test(line)) {
+                    break;
+                }
+                if (/^(?:Розхід|Росхід|Причина|Коментар|Набій|Витрат|Обʼєкт|Зброя|Засіб)/i.test(line)) {
+                    continue;
+                }
+                if (/^(?:(?:гол|ст|мол|мл|гл)?[\.\s]*(?:с[\-.]?нт|с[\-.]?т|солд|солдат|сол|к[\-.]?н|капітан|сержант|п[\-\.]*к|п\.п[\-.]*к|м[\-.]*р|майор|полковник|підполковник|лейтенант|л[\-.]?т)|[А-ЯЄІЇҐ]{3,}\s+[А-ЯЄІЇҐA-Z]\.?)/i.test(line)) {
+                    const sp = cleanVal(line);
+                    if (sp && !people.includes(sp)) {
+                        people.push(sp);
+                    }
+                }
+            } else {
+                if (/^(?:солд|ст[\.\s]*солд|мол[\.\s]*с\-нт|с\-нт|с\-т|к\-н|п\-к|п\.п\-к|м\-р)\.?\s+[А-ЯЄІЇҐ][а-яєіїґ]+/i.test(line)) {
+                    const sp = cleanVal(line);
+                    if (sp && !people.includes(sp)) {
+                        people.push(sp);
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. Пошук звань та прізвищ у полі 'Опис:' або по всьому тексту формуляру
+    if (people.length === 0) {
+        const rankPattern = '(?:г[\\-.]?л|ген(?:ерал)?|п\\.?п[\\-.]?к|підполк(?:овник)?|п[\\-.]?к|полк(?:овник)?|м[\\-.]?р|майор|к[\\-.]?н|кап(?:ітан)?|ст\\.?\\s*(?:л[\\-.]?т|лейт(?:енант)?)|мол\\.?\\s*(?:л[\\-.]?т|лейт(?:енант)?)|(?:м|мл)\\.?\\s*л[\\-.]?т|л[\\-.]?т|лейт(?:енант)?|гол\\.?\\s*(?:майстер[\\-.]?)?(?:с[\\-.]?нт|с[\\-.]?т|серж(?:ант)?)|(?:штаб|майстер)[\\-.]?(?:с[\\-.]?нт|с[\\-.]?т|серж(?:ант)?)|ст\\.?\\s*(?:с[\\-.]?нт|с[\\-.]?т|серж(?:ант)?)|мол\\.?\\s*(?:с[\\-.]?нт|с[\\-.]?т|серж(?:ант)?)|(?:м|мл)\\.?\\s*с[\\-.]?т|с[\\-.]?нт|с[\\-.]?т|серж(?:ант)?|ст\\.?\\s*(?:солд(?:ат)?|матрос)|солд(?:ат)?|сол\\b|матрос)';
+        const reP = new RegExp('(?:^|[\\s,;])(' + rankPattern + '[\\.\\s]+[А-ЯЄІЇҐ][а-яёіїєґa-z0-9\\-]*(?:[ \\t]+[А-ЯЄІЇҐ]\\.(?:[ \\t]*[А-ЯЄІЇҐ]\\.)?|[ \\t]+[А-ЯЄІЇҐ]{1,2}\\b\\.?|[ \\t]+[А-ЯЄІЇҐ][а-яёіїєґa-z0-9\\-]+)?)', 'gi');
+        let pm;
+        while ((pm = reP.exec(fullText)) !== null) {
+            const sp = cleanVal(pm[1]);
+            if (sp && !people.includes(sp)) {
+                people.push(sp);
+            }
+        }
+    }
+
+    return people.slice(0, 5);
+}
+
+function parseFormular(block) {
+    const res = {};
+    for (const c of COLUMNS) {
+        res[c] = "";
+    }
+
+    const lines = block.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+    const fullText = lines.join("\n");
+
+    // 1. ДАТА
+    let dateM = fullText.match(/(?:Дата\s*[:.]?\s*|\/\s*Дата\s*[:.]?\s*|(?:^|[\s,;])дата\s+)(\d{1,2})[.\s]+(\d{1,2})[.\s]*(\d{2,4})?/i);
+    if (!dateM) {
+        dateM = fullText.match(/(\d{1,2})[.\s]+(\d{1,2})[.\s]+(\d{2,4})/);
+    }
+    if (dateM) {
+        let d = dateM[1];
+        let m = dateM[2];
+        let y = dateM[3];
+
+        if (y) {
+            if (y.length === 2) y = "20" + y;
+        } else {
+            y = "2026";
+        }
+
+        if (m.length === 4 && m.endsWith("26")) {
+            y = "20" + m.slice(2);
+            m = m.slice(0, 2);
+        }
+
+        res["Дата"] = `${String(parseInt(d, 10)).padStart(2, '0')}.${String(parseInt(m, 10)).padStart(2, '0')}.${y}`;
+    }
+
+    // 2. ЧАС
+    let timeM = fullText.match(/(?:^|\n)\s*(?:[()]?\s*(?:1\s*[).:])?\s*)?Ч(?:ас)?[:.\s]*(\d{1,2})[\s:.]*(\d{2})(?=[^\d]|$)/i);
+    if (!timeM) {
+        timeM = fullText.match(/(?:^|\n)\s*(?:[()]?\s*(?:1\s*[).:])?\s*)?Час\s*(\d{2})(\d{2})(?=[^\d]|$)/i);
+    }
+    if (timeM) {
+        const h = parseInt(timeM[1], 10);
+        const mn = parseInt(timeM[2], 10);
+        res["Час"] = `${String(h).padStart(2, '0')}:${String(mn).padStart(2, '0')}`;
+    }
+
+    // 3. НАСЕЛЕНИЙ ПУНКТ & 4. ОБЛАСТЬ
+    const npM = fullText.match(/(?:(?:^|\n)\s*(?:\d+[).]\s*)?(?:Н[.\s]*П[.:\s]+|Населений\s*(?:пункт)?[:\s]+|н\.п\.\s*))([^\n\r]+)/i);
+    if (npM) {
+        let npRaw = npM[1].trim();
+        npRaw = npRaw.replace(/\(прикриття[^\)]*\)/gi, "").trim();
+
+        if (npRaw.toLowerCase().includes("обл")) {
+            const parts = npRaw.split(/[,;]\s*/);
+            const npParts = [];
+            for (const p of parts) {
+                if (p.toLowerCase().includes("обл")) {
+                    res["Область"] = cleanVal(p);
+                } else {
+                    npParts.push(p);
+                }
+            }
+            res["Населений пункт"] = cleanVal(npParts.join(", "));
+        } else {
+            res["Населений пункт"] = cleanVal(npRaw);
+        }
+    }
+
+    if (res["Населений пункт"].toLowerCase().startsWith("прикриття")) {
+        if (!res["Коментар"]) {
+            res["Коментар"] = res["Населений пункт"];
+        }
+        res["Населений пункт"] = "";
+    }
+
+    // Явна область
+    const oblM = fullText.match(/(?:(?:^|\n)\s*Обл[.:\s]+)([^\n\r,]+)/i);
+    if (oblM) {
+        res["Область"] = cleanVal(oblM[1]);
+    }
+
+    // 5. НАЗВА ГРУПИ
+    res["Назва групи"] = extractGroupName(fullText);
+
+    // 6. АЗИМУТ, 7. КУРС, 8. ДАЛЬНІСТЬ, 9. ВИСОТА
+    const azM = fullText.match(/(?:Азимут[:\s\-]*|(?:^|[\s,;.\-])А\s*[:\-])\s*(\d+)/i);
+    if (azM) res["Азимут"] = parseInt(azM[1], 10);
+
+    const courseM = fullText.match(/(?:Курс[:\s\-]*|(?:^|[\s,;.\-])К\s*[:\-])\s*(\d+)/i);
+    if (courseM) res["Курс"] = parseInt(courseM[1], 10);
+
+    const distM = fullText.match(/(?:(?:Дальність|Відстань)[:\s\-]*|(?:^|[\s,;.\-])Д\s*[:\-])\s*(\d+)/i);
+    if (distM) res["Дальність"] = parseInt(distM[1], 10);
+
+    const hM = fullText.match(/(?:Висота[:\s\-]*|(?:^|[\s,;.\-])В\s*[:\-])\s*(\d+)/i);
+    if (hM) res["Висота"] = parseInt(hM[1], 10);
+
+    // 10. ТИП ЦІЛІ & 11. НОМЕР ЦІЛІ
+    const numM = fullText.match(/(?:(?:^|\n)\s*(?:\d+[).]\s*)?(?:№\s*цілі|Номер\s*цілі|Номер(?!\s*цілі))[ \t\-:]+)([^\n\r]+)/i);
+    if (numM) {
+        let nVal = numM[1].trim();
+        if (/^[….\s\-]+$/.test(nVal)) {
+            nVal = "";
+        }
+        res["Номер цілі"] = cleanVal(nVal);
+    }
+
+    if (!res["Номер цілі"]) {
+        const nM2 = fullText.match(/№\s*цілі\s*[:-]?\s*(\d+|б\/н|н\/в|н\/б|без\s+видачі)/i);
+        if (nM2) {
+            res["Номер цілі"] = cleanVal(nM2[1]);
+        } else if (/(?:Номер\s*цілі|№\s*цілі)[ \t\-:]*(?:\r?\n|$)/i.test(fullText)) {
+            res["Номер цілі"] = "б/н";
+        }
+    }
+
+    const typeM = fullText.match(/(?:(?:^|\n)\s*(?:\d+[).]\s*)?Тип\s*цілі[ \t\-:]+)([^\n\r]+)/i);
+    if (typeM) {
+        res["Тип цілі"] = cleanVal(typeM[1]);
+    } else {
+        const opisM = fullText.match(/Опис[:\s]+([^\n\r]+)/i);
+        if (opisM) {
+            const op = opisM[1];
+            const targetMatch = op.match(/(?:обстріляно|знищено)\s*(?:\d+\s*)?([^,]+)/i);
+            if (targetMatch) {
+                res["Тип цілі"] = cleanVal(targetMatch[1]);
+            } else if (/shahed|шахед|кр|бпла/i.test(op)) {
+                const tSub = op.match(/(?:^|[\s,;])(БПЛА\s+[^,]+|Shahed[^,]*|Шахед[^,]*|КР(?![а-яa-z]))/i);
+                if (tSub) {
+                    res["Тип цілі"] = cleanVal(tSub[1]);
+                }
+            }
+        }
+    }
+
+    // Якщо замість номера вказано тип
+    if (res["Номер цілі"] && /(?:^|[^а-яёіїєґa-z])(гербера|шахед|літак|крило)(?:[^а-яёіїєґa-z]|$)/i.test(res["Номер цілі"])) {
+        if (!res["Тип цілі"]) {
+            res["Тип цілі"] = res["Номер цілі"];
+        }
+        res["Номер цілі"] = "б/н";
+    }
+
+    // 12. РЕЗУЛЬТАТ
+    const resM = fullText.match(/(?:(?:^|\n)\s*(?:\d+[).]\s*)?Результат[:\s\-]+)([^\n\r]+)/i);
+    if (resM) {
+        res["Результат"] = cleanVal(resM[1]);
+    } else {
+        const resM2 = fullText.match(/(?:^|\n)\s*\d+[).]\s*(не\s*знищено[^\n\r]*|знищено[^\n\r]*)/i);
+        if (resM2) {
+            res["Результат"] = cleanVal(resM2[1]);
+        }
+    }
+
+    // 13-26. БОЄПРИПАСИ
+    const ammoData = parseAmmo(fullText, lines);
+    for (const [k, v] of Object.entries(ammoData)) {
+        res[k] = v;
+    }
+
+    // 27. КОМЕНТАР
+    const comM = fullText.match(/(?:(?:^|\n)\s*Коментар[:\s]+)([^\n\r]+)/i);
+    if (comM) {
+        const cVal = cleanVal(comM[1]);
+        if (cVal && cVal !== "-") {
+            res["Коментар"] = cVal;
+        }
+    }
+
+    const prizM = fullText.match(/(?:(?:^|\n)\s*Причина\s*незнищення[:\s]+)([^\n\r]+)/i);
+    if (prizM) {
+        const pVal = cleanVal(prizM[1]);
+        if (pVal) {
+            if (res["Коментар"]) {
+                res["Коментар"] += "; " + pVal;
+            } else {
+                res["Коментар"] = pVal;
+            }
+        }
+    }
+
+    const noteM = fullText.match(/(Обʼєкт\s*ппп[^\n\r]*)/i);
+    if (noteM) {
+        const nVal = cleanVal(noteM[1]);
+        if (res["Коментар"]) {
+            if (!res["Коментар"].includes(nVal)) {
+                res["Коментар"] += "; " + nVal;
+            }
+        } else {
+            res["Коментар"] = nVal;
+        }
+    }
+
+    // 28-32. СКЛАД ГРУПИ №1 - №5
+    const people = extractPersonnel(fullText, lines);
+    for (let i = 0; i < Math.min(5, people.length); i++) {
+        res[`Склад групи №${i + 1}`] = people[i];
+    }
+
+    return res;
+}
+
+function parseAll(content) {
+    const blocks = splitFormulars(content);
+    return blocks.map(b => parseFormular(b));
+}
+
+function parseFormularToList(text) {
+    const rec = parseFormular(text);
+    return COLUMNS.map(c => (rec[c] !== undefined && rec[c] !== null) ? rec[c] : "");
+}
+
+function escapeCsvCell(val) {
+    if (val === null || val === undefined) return "";
+    if (typeof val === "number") return String(val);
+    const s = String(val);
+    if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
+        return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+}
+
+function parseFormularToCsv(text, includeHeader = false) {
+    const values = parseFormularToList(text);
+    const dataRow = values.map(escapeCsvCell).join(",");
+    if (includeHeader) {
+        const headerRow = COLUMNS.map(escapeCsvCell).join(",");
+        return headerRow + "\n" + dataRow;
+    }
+    return dataRow;
+}
+
+function createZip(files) {
+    const crcTable = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+        let c = i;
+        for (let k = 0; k < 8; k++) {
+            c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        }
+        crcTable[i] = c;
+    }
+
+    function calcCrc32(uint8Arr) {
+        let crc = 0xFFFFFFFF;
+        for (let i = 0; i < uint8Arr.length; i++) {
+            crc = crcTable[(crc ^ uint8Arr[i]) & 0xFF] ^ (crc >>> 8);
+        }
+        return (crc ^ 0xFFFFFFFF) >>> 0;
+    }
+
+    const enc = new TextEncoder();
+    const localHeaders = [];
+    const cdHeaders = [];
+    let offset = 0;
+
+    for (const f of files) {
+        const nameBytes = enc.encode(f.name);
+        const dataBytes = f.data instanceof Uint8Array ? f.data : enc.encode(f.data);
+        const crc = calcCrc32(dataBytes);
+        const size = dataBytes.length;
+
+        // Local header (30 bytes + name)
+        const lh = new Uint8Array(30 + nameBytes.length);
+        const dvLh = new DataView(lh.buffer);
+        dvLh.setUint32(0, 0x04034b50, true);
+        dvLh.setUint16(4, 20, true);
+        dvLh.setUint16(6, 0x0800, true);
+        dvLh.setUint16(8, 0, true);
+        dvLh.setUint16(10, 0, true);
+        dvLh.setUint16(12, 0, true);
+        dvLh.setUint32(14, crc, true);
+        dvLh.setUint32(18, size, true);
+        dvLh.setUint32(22, size, true);
+        dvLh.setUint16(26, nameBytes.length, true);
+        dvLh.setUint16(28, 0, true);
+        lh.set(nameBytes, 30);
+
+        localHeaders.push({ lh, data: dataBytes });
+
+        // Central directory header (46 bytes + name)
+        const cdh = new Uint8Array(46 + nameBytes.length);
+        const dvCd = new DataView(cdh.buffer);
+        dvCd.setUint32(0, 0x02014b50, true);
+        dvCd.setUint16(4, 20, true);
+        dvCd.setUint16(6, 20, true);
+        dvCd.setUint16(8, 0x0800, true);
+        dvCd.setUint16(10, 0, true);
+        dvCd.setUint16(12, 0, true);
+        dvCd.setUint16(14, 0, true);
+        dvCd.setUint32(16, crc, true);
+        dvCd.setUint32(20, size, true);
+        dvCd.setUint32(24, size, true);
+        dvCd.setUint16(28, nameBytes.length, true);
+        dvCd.setUint16(30, 0, true);
+        dvCd.setUint16(32, 0, true);
+        dvCd.setUint16(34, 0, true);
+        dvCd.setUint16(36, 0, true);
+        dvCd.setUint32(38, 0, true);
+        dvCd.setUint32(42, offset, true);
+        cdh.set(nameBytes, 46);
+
+        cdHeaders.push(cdh);
+        offset += lh.length + dataBytes.length;
+    }
+
+    const cdOffset = offset;
+    let cdSize = 0;
+    for (const cdh of cdHeaders) {
+        cdSize += cdh.length;
+    }
+
+    // End of central directory record (22 bytes)
+    const eocd = new Uint8Array(22);
+    const dvEo = new DataView(eocd.buffer);
+    dvEo.setUint32(0, 0x06054b50, true);
+    dvEo.setUint16(4, 0, true);
+    dvEo.setUint16(6, 0, true);
+    dvEo.setUint16(8, files.length, true);
+    dvEo.setUint16(10, files.length, true);
+    dvEo.setUint32(12, cdSize, true);
+    dvEo.setUint32(16, cdOffset, true);
+    dvEo.setUint16(20, 0, true);
+
+    const totalLen = offset + cdSize + 22;
+    const result = new Uint8Array(totalLen);
+    let cur = 0;
+    for (const item of localHeaders) {
+        result.set(item.lh, cur);
+        cur += item.lh.length;
+        result.set(item.data, cur);
+        cur += item.data.length;
+    }
+    for (const cdh of cdHeaders) {
+        result.set(cdh, cur);
+        cur += cdh.length;
+    }
+    result.set(eocd, cur);
+    return result;
+}
+
+function escapeXml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+}
+
+function colLetter(colIdx) {
+    let result = "";
+    while (colIdx > 0) {
+        const remainder = (colIdx - 1) % 26;
+        result = String.fromCharCode(65 + remainder) + result;
+        colIdx = Math.floor((colIdx - 1) / 26);
+    }
+    return result;
+}
+
+function generateXlsxBlob(columns, records) {
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>`;
+
+    const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`;
+
+    const workbook = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="Формуляри" sheetId="1" r:id="rId1"/>
+  </sheets>
+</workbook>`;
+
+    const workbookRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`;
+
+    const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="2">
+    <font><name val="Calibri"/><sz val="11"/></font>
+    <font><b/><color rgb="FFFFFFFF"/><name val="Calibri"/><sz val="11"/></font>
+  </fonts>
+  <fills count="3">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF1F497D"/></patternFill></fill>
+  </fills>
+  <borders count="2">
+    <border><left/><right/><top/><bottom/></border>
+    <border>
+      <left style="thin"><color rgb="FFD9D9D9"/></left>
+      <right style="thin"><color rgb="FFD9D9D9"/></right>
+      <top style="thin"><color rgb="FFD9D9D9"/></top>
+      <bottom style="thin"><color rgb="FFD9D9D9"/></bottom>
+    </border>
+  </borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="3">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>
+  </cellXfs>
+</styleSheet>`;
+
+    const sheetRows = [];
+
+    // 1. Заголовки (Row 1)
+    const hCells = [];
+    columns.forEach((h, idx) => {
+        const cellRef = colLetter(idx + 1) + "1";
+        hCells.push(`<c r="${cellRef}" t="inlineStr" s="1"><is><t>${escapeXml(h)}</t></is></c>`);
+    });
+    sheetRows.push(`<row r="1">${hCells.join("")}</row>`);
+
+    // 2. Рядки даних (Row 2 .. N+1)
+    records.forEach((rec, rIdx) => {
+        const rowNum = rIdx + 2;
+        const rCells = [];
+        columns.forEach((colName, cIdx) => {
+            const val = rec[colName];
+            if (val === null || val === undefined || val === "") return;
+            const cellRef = colLetter(cIdx + 1) + rowNum;
+            if (typeof val === "number") {
+                rCells.push(`<c r="${cellRef}" t="n" s="2"><v>${val}</v></c>`);
+            } else {
+                rCells.push(`<c r="${cellRef}" t="inlineStr" s="2"><is><t>${escapeXml(val)}</t></is></c>`);
+            }
+        });
+        if (rCells.length > 0) {
+            sheetRows.push(`<row r="${rowNum}">${rCells.join("")}</row>`);
+        }
+    });
+
+    const worksheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>
+    ${sheetRows.join("")}
+  </sheetData>
+</worksheet>`;
+
+    const files = [
+        { name: "[Content_Types].xml", data: contentTypes },
+        { name: "_rels/.rels", data: rels },
+        { name: "xl/workbook.xml", data: workbook },
+        { name: "xl/_rels/workbook.xml.rels", data: workbookRels },
+        { name: "xl/styles.xml", data: styles },
+        { name: "xl/worksheets/sheet1.xml", data: worksheet }
+    ];
+
+    return createZip(files);
+}
+
+// Експорт для Node.js (CommonJS), ES-модулів та браузера
+if (typeof module !== "undefined" && module.exports) {
+    module.exports = {
+        COLUMNS,
+        cleanVal,
+        escapeXml,
+        splitFormulars,
+        parseFormular,
+        parseAll,
+        parseFormularToList,
+        parseFormularToCsv,
+        generateXlsxBlob
+    };
+}
+
+if (typeof globalThis !== "undefined") {
+    globalThis.ParserPPO = {
+        COLUMNS,
+        cleanVal,
+        escapeXml,
+        splitFormulars,
+        parseFormular,
+        parseAll,
+        parseFormularToList,
+        parseFormularToCsv,
+        generateXlsxBlob
+    };
+}
+
+// Підтримка виконання через командний рядок Node.js
+if (typeof require !== "undefined" && typeof module !== "undefined" && require.main === module) {
+    const fs = require("fs");
+    const args = process.argv.slice(2);
+    const includeHeader = args.includes("--header");
+    const cleanArgs = args.filter(a => a !== "--header");
+
+    if (cleanArgs.length > 0) {
+        const firstArg = cleanArgs[0];
+        if (fs.existsSync(firstArg)) {
+            const content = fs.readFileSync(firstArg, "utf-8");
+            console.log(parseFormularToCsv(content, includeHeader));
+        } else {
+            console.log(parseFormularToCsv(firstArg, includeHeader));
+        }
+    } else {
+        let inputData = "";
+        process.stdin.setEncoding("utf-8");
+        process.stdin.on("data", chunk => {
+            inputData += chunk;
+        });
+        process.stdin.on("end", () => {
+            if (inputData.trim()) {
+                console.log(parseFormularToCsv(inputData, includeHeader));
+            }
+        });
+    }
+}
+
+</script>
+
+<!-- UI Interaction Script -->
+<script>
+// Elements
+const inputEl = document.getElementById('inputText');
+const btnParse = document.getElementById('btnParse');
+const btnClear = document.getElementById('btnClear');
+const resultsArea = document.getElementById('resultsArea');
+const tableHeaders = document.getElementById('tableHeaders');
+const tableDataRow = document.getElementById('tableDataRow');
+const chkIncludeTableHeader = document.getElementById('chkIncludeTableHeader');
+const btnCopyTable = document.getElementById('btnCopyTable');
+const btnDownloadXlsx = document.getElementById('btnDownloadXlsx');
+const csvOutput = document.getElementById('csvOutput');
+const chkIncludeHeader = document.getElementById('chkIncludeHeader');
+const btnCopyCsv = document.getElementById('btnCopyCsv');
+const btnDownloadCsv = document.getElementById('btnDownloadCsv');
+const toastMessage = document.getElementById('toastMessage');
+
+// Parser instance
+const ppo = window.ParserPPO;
+
+// Stored parsed records for table / export
+let currentParsedRecords = [];
+
+// Toast helper
+function showToast(text) {
+    toastMessage.textContent = text;
+    toastMessage.classList.add('show');
+    setTimeout(() => {
+        toastMessage.classList.remove('show');
+    }, 2400);
+}
+
+// Build Full Table Headers once (without column numbers)
+function initTableHeader() {
+    tableHeaders.innerHTML = '';
+    ppo.COLUMNS.forEach(col => {
+        const th = document.createElement('th');
+        th.textContent = col;
+        tableHeaders.appendChild(th);
+    });
+}
+
+// Execute parsing
+function doParse() {
+    const rawText = inputEl.value.trim();
+    if (!rawText) {
+        showToast('⚠️ Будь ласка, введіть або вставте текст формуляру');
+        inputEl.focus();
+        return;
+    }
+
+    // Check if multiple formulars were pasted
+    const blocks = ppo.splitFormulars(rawText);
+    currentParsedRecords = blocks.map(b => ppo.parseFormular(b));
+    const targetBlock = blocks[0]; // parse the main/first formular
+
+    const parsedList = ppo.parseFormularToList(targetBlock);
+
+    renderFullTable(parsedList);
+    renderCsv(targetBlock);
+
+    resultsArea.style.display = 'block';
+
+    // Smooth scroll down to results
+    resultsArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Render horizontal table row
+function renderFullTable(values) {
+    tableDataRow.innerHTML = '';
+    values.forEach(val => {
+        const td = document.createElement('td');
+        if (val !== '' && val !== null && val !== undefined) {
+            td.className = 'cell-val';
+            td.textContent = String(val);
+        } else {
+            td.className = 'cell-empty';
+            td.textContent = '—';
+        }
+        tableDataRow.appendChild(td);
+    });
+}
+
+// Update CSV representation
+function renderCsv(text) {
+    const withHeader = chkIncludeHeader.checked;
+    const csvStr = ppo.parseFormularToCsv(text || inputEl.value.trim(), withHeader);
+    csvOutput.textContent = csvStr;
+}
+
+// Event Listeners
+btnParse.addEventListener('click', doParse);
+
+// Shortcuts: Ctrl+Enter in textarea
+inputEl.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        doParse();
+    }
+});
+
+btnClear.addEventListener('click', () => {
+    inputEl.value = '';
+    currentParsedRecords = [];
+    resultsArea.style.display = 'none';
+    inputEl.focus();
+    showToast('Форму очищено');
+});
+
+// Copy Table to clipboard (TSV format for direct Excel paste, and HTML table)
+btnCopyTable.addEventListener('click', async () => {
+    if (!currentParsedRecords || currentParsedRecords.length === 0) return;
+    const withHeader = chkIncludeTableHeader.checked;
+    const targetRecord = currentParsedRecords[0];
+    const rowValues = ppo.COLUMNS.map(c => (targetRecord[c] !== undefined && targetRecord[c] !== null) ? String(targetRecord[c]) : '');
+
+    // Tab-separated text (TSV for Excel / Google Sheets)
+    const tsvRows = [];
+    if (withHeader) {
+        tsvRows.push(ppo.COLUMNS.join('\t'));
+    }
+    tsvRows.push(rowValues.join('\t'));
+    const textToCopy = tsvRows.join('\r\n');
+
+    // HTML table for rich clipboard paste
+    let htmlTable = '<table>';
+    if (withHeader) {
+        htmlTable += '<thead><tr>' + ppo.COLUMNS.map(c => `<th>${ppo.escapeXml(c)}</th>`).join('') + '</tr></thead>';
+    }
+    htmlTable += '<tbody><tr>' + rowValues.map(v => `<td>${ppo.escapeXml(v)}</td>`).join('') + '</tr></tbody></table>';
+
+    try {
+        if (navigator.clipboard && window.ClipboardItem) {
+            const textBlob = new Blob([textToCopy], { type: 'text/plain' });
+            const htmlBlob = new Blob([htmlTable], { type: 'text/html' });
+            await navigator.clipboard.write([
+                new ClipboardItem({
+                    'text/plain': textBlob,
+                    'text/html': htmlBlob
+                })
+            ]);
+        } else {
+            await navigator.clipboard.writeText(textToCopy);
+        }
+        showToast('✓ Дані таблиці скопійовано у буфер обміну!');
+    } catch (err) {
+        // Fallback for older browsers or file:// context
+        const ta = document.createElement('textarea');
+        ta.value = textToCopy;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showToast('✓ Дані таблиці скопійовано у буфер обміну!');
+    }
+});
+
+// Download .xlsx file directly
+btnDownloadXlsx.addEventListener('click', () => {
+    if (!currentParsedRecords || currentParsedRecords.length === 0) return;
+    try {
+        const xlsxBytes = ppo.generateXlsxBlob(ppo.COLUMNS, currentParsedRecords);
+        const blob = new Blob([xlsxBytes], {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `formular_ppo_${Date.now()}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('✓ Файл .xlsx завантажено');
+    } catch (err) {
+        console.error(err);
+        showToast('❌ Помилка при створенні .xlsx: ' + err.message);
+    }
+});
+
+chkIncludeHeader.addEventListener('change', () => {
+    if (inputEl.value.trim()) {
+        renderCsv(inputEl.value.trim());
+    }
+});
+
+btnCopyCsv.addEventListener('click', async () => {
+    const textToCopy = csvOutput.textContent;
+    if (!textToCopy) return;
+
+    try {
+        await navigator.clipboard.writeText(textToCopy);
+        showToast('✓ Значення через кому скопійовано у буфер!');
+    } catch (err) {
+        // Fallback for older browsers or file:// context
+        const ta = document.createElement('textarea');
+        ta.value = textToCopy;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showToast('✓ Значення через кому скопійовано у буфер!');
+    }
+});
+
+btnDownloadCsv.addEventListener('click', () => {
+    const textToDownload = csvOutput.textContent;
+    if (!textToDownload) return;
+
+    const blob = new Blob(["\uFEFF" + textToDownload], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `formular_ppo_${Date.now()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('✓ Файл .csv завантажено');
+});
+
+// Initialize table header on load
+initTableHeader();
+</script>
+
+</body>
+</html>
