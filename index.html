@@ -222,9 +222,11 @@
             margin-bottom: 16px;
         }
 
-        /* Full 32 columns Table */
+        /* Full 33 columns Table */
         .table-wrapper {
             overflow-x: auto;
+            overflow-y: auto;
+            max-height: 580px;
             border: 1px solid var(--border-color);
             border-radius: 8px;
             background: #ffffff;
@@ -248,6 +250,7 @@
             border-right: 1px solid #e2e8f0;
             position: sticky;
             top: 0;
+            z-index: 2;
         }
 
         td {
@@ -430,7 +433,7 @@
             </div>
         </div>
 
-        <textarea id="inputText" rows="20" placeholder="Текст формуляру застосування..."></textarea>
+        <textarea id="inputText" rows="20" placeholder="Текст формулярів застосування..."></textarea>
 
         <div class="actions-row">
             <div class="btn-group">
@@ -458,6 +461,7 @@
             <div class="card-header">
                 <div class="card-title">
                     <span>Таблична форма</span>
+                    <span id="tableRecordCount" style="margin-left: 8px; font-size: 0.85rem; font-weight: normal; color: var(--text-muted);"></span>
                 </div>
             </div>
 
@@ -466,8 +470,7 @@
                     <thead>
                         <tr id="tableHeaders"></tr>
                     </thead>
-                    <tbody>
-                        <tr id="tableDataRow"></tr>
+                    <tbody id="tableBody">
                     </tbody>
                 </table>
             </div>
@@ -493,7 +496,7 @@
         <div class="card">
             <div class="card-header">
                 <div class="card-title">
-                    <span>Значення через кому (CSV рядок)</span>
+                    <span>Значення через кому (CSV)</span>
                 </div>
             </div>
 
@@ -575,29 +578,62 @@ function cleanVal(val) {
 function splitFormulars(content) {
     const lines = content.split(/\r?\n/);
     const starts = [];
+    let lastNonEmptyIdx = -1;
 
     for (let i = 0; i < lines.length; i++) {
         const l = lines[i].trim();
         if (!l) continue;
 
-        if (/^Дата\s*:/i.test(l)) {
-            starts.push(i);
-        } else if (/^\(?\s*1\s*[).:]/i.test(l)) {
-            if (!/^\d+:\d+$/.test(l)) {
-                starts.push(i);
+        let isStart = false;
+
+        // 1. Розділювачі: ---, ===, ___
+        if (/^[=\-_*#]{3,}\s*$/.test(l)) {
+            isStart = true;
+        }
+        // 2. Явні заголовки 'Формуляр', 'Звіт', 'Застосування'
+        else if (/^\s*(?:Формуляр|Звіт|Застосування)\b/i.test(l)) {
+            isStart = true;
+        }
+        // 3. 'Дата:'
+        else if (/^Дата\s*:/i.test(l)) {
+            // Якщо одразу перед цим протягом 1-2 рядків був 'Час:', це той самий формуляр
+            if (starts.length > 0 && (i - starts[starts.length - 1] <= 2) && /^\s*Час\b/i.test(lines[starts[starts.length - 1]].trim())) {
+                isStart = false;
+            } else {
+                isStart = true;
             }
-        } else if (/^\)?\s*Час\s*[:.\s]*\d+.*Дата/i.test(l)) {
-            starts.push(i);
+        }
+        // 4. Нумерований початок виду '1) ...' або '1. ...' або '1: ...'
+        else if (/^\(?\s*1\s*[).:]/i.test(l)) {
+            if (!/^\d+:\d+$/.test(l)) {
+                isStart = true;
+            }
+        }
+        // 5. ') Час: ...' або 'Час: ... Дата: ...'
+        else if (/^\)?\s*Час\s*[:.\s]*\d+.*Дата/i.test(l)) {
+            isStart = true;
         } else if (/^\)\s*Час/i.test(l)) {
+            isStart = true;
+        }
+        // 6. 'Час: HH:MM' після порожнього рядка або на початку тексту, якщо попередній рядок не був 'Дата:'
+        else if (/^\s*Час\s*[:.\s]+\d{1,2}[:.]\d{2}/i.test(l)) {
+            if (lastNonEmptyIdx === -1 || (lastNonEmptyIdx < i - 1 && !/^Дата\s*:/i.test(lines[lastNonEmptyIdx].trim()))) {
+                isStart = true;
+            }
+        }
+
+        if (isStart) {
             starts.push(i);
         }
+        lastNonEmptyIdx = i;
     }
 
     const formulars = [];
     for (let idx = 0; idx < starts.length; idx++) {
         const s = starts[idx];
         const e = (idx + 1 < starts.length) ? starts[idx + 1] : lines.length;
-        const block = lines.slice(s, e).join("\n").trim();
+        let block = lines.slice(s, e).join("\n").trim();
+        block = block.replace(/^[=\-_*#]{3,}\s*\n?/, "").trim();
         if (block) {
             formulars.push(block);
         }
@@ -1149,6 +1185,19 @@ function parseFormularToCsv(text, includeHeader = false) {
     return dataRow;
 }
 
+function parseAllToCsv(content, includeHeader = false) {
+    const blocks = splitFormulars(content);
+    const rows = [];
+    if (includeHeader) {
+        rows.push(COLUMNS.map(escapeCsvCell).join(","));
+    }
+    blocks.forEach(b => {
+        const values = parseFormularToList(b);
+        rows.push(values.map(escapeCsvCell).join(","));
+    });
+    return rows.join("\n");
+}
+
 function createZip(files) {
     const crcTable = new Uint32Array(256);
     for (let i = 0; i < 256; i++) {
@@ -1387,11 +1436,13 @@ if (typeof module !== "undefined" && module.exports) {
         COLUMNS,
         cleanVal,
         escapeXml,
+        escapeCsvCell,
         splitFormulars,
         parseFormular,
         parseAll,
         parseFormularToList,
         parseFormularToCsv,
+        parseAllToCsv,
         generateXlsxBlob
     };
 }
@@ -1401,11 +1452,13 @@ if (typeof globalThis !== "undefined") {
         COLUMNS,
         cleanVal,
         escapeXml,
+        escapeCsvCell,
         splitFormulars,
         parseFormular,
         parseAll,
         parseFormularToList,
         parseFormularToCsv,
+        parseAllToCsv,
         generateXlsxBlob
     };
 }
@@ -1449,7 +1502,9 @@ const btnParse = document.getElementById('btnParse');
 const btnClear = document.getElementById('btnClear');
 const resultsArea = document.getElementById('resultsArea');
 const tableHeaders = document.getElementById('tableHeaders');
-const tableDataRow = document.getElementById('tableDataRow');
+const tableBody = document.getElementById('tableBody');
+const tableRecordCount = document.getElementById('tableRecordCount');
+const statusBadge = document.getElementById('statusBadge');
 const chkIncludeTableHeader = document.getElementById('chkIncludeTableHeader');
 const btnCopyTable = document.getElementById('btnCopyTable');
 const btnDownloadXlsx = document.getElementById('btnDownloadXlsx');
@@ -1493,15 +1548,23 @@ function doParse() {
         return;
     }
 
-    // Check if multiple formulars were pasted
+    // Split multiple formulars
     const blocks = ppo.splitFormulars(rawText);
     currentParsedRecords = blocks.map(b => ppo.parseFormular(b));
-    const targetBlock = blocks[0]; // parse the main/first formular
+    const count = currentParsedRecords.length;
 
-    const parsedList = ppo.parseFormularToList(targetBlock);
+    renderFullTable(currentParsedRecords);
+    renderCsv(currentParsedRecords);
 
-    renderFullTable(parsedList);
-    renderCsv(targetBlock);
+    if (count === 1) {
+        statusBadge.textContent = '✓ Успішно розпарсено 1 формуляр';
+    } else {
+        statusBadge.textContent = `✓ Успішно розпарсено формулярів: ${count}`;
+    }
+
+    if (tableRecordCount) {
+        tableRecordCount.textContent = `(записів: ${count})`;
+    }
 
     resultsArea.style.display = 'block';
 
@@ -1509,27 +1572,40 @@ function doParse() {
     resultsArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-// Render horizontal table row
-function renderFullTable(values) {
-    tableDataRow.innerHTML = '';
-    values.forEach(val => {
-        const td = document.createElement('td');
-        if (val !== '' && val !== null && val !== undefined) {
-            td.className = 'cell-val';
-            td.textContent = String(val);
-        } else {
-            td.className = 'cell-empty';
-            td.textContent = '—';
-        }
-        tableDataRow.appendChild(td);
+// Render all table rows
+function renderFullTable(records) {
+    tableBody.innerHTML = '';
+    records.forEach(rec => {
+        const tr = document.createElement('tr');
+        ppo.COLUMNS.forEach(col => {
+            const td = document.createElement('td');
+            const val = rec[col];
+            if (val !== '' && val !== null && val !== undefined) {
+                td.className = 'cell-val';
+                td.textContent = String(val);
+            } else {
+                td.className = 'cell-empty';
+                td.textContent = '—';
+            }
+            tr.appendChild(td);
+        });
+        tableBody.appendChild(tr);
     });
 }
 
 // Update CSV representation
-function renderCsv(text) {
+function renderCsv(records) {
     const withHeader = chkIncludeHeader.checked;
-    const csvStr = ppo.parseFormularToCsv(text || inputEl.value.trim(), withHeader);
-    csvOutput.textContent = csvStr;
+    const recs = records || currentParsedRecords;
+    const rows = [];
+    if (withHeader) {
+        rows.push(ppo.COLUMNS.map(ppo.escapeCsvCell).join(','));
+    }
+    recs.forEach(rec => {
+        const vals = ppo.COLUMNS.map(c => (rec[c] !== undefined && rec[c] !== null) ? rec[c] : '');
+        rows.push(vals.map(ppo.escapeCsvCell).join(','));
+    });
+    csvOutput.textContent = rows.join('\n');
 }
 
 // Event Listeners
@@ -1546,6 +1622,9 @@ btnClear.addEventListener('click', () => {
     inputEl.value = '';
     currentParsedRecords = [];
     resultsArea.style.display = 'none';
+    if (tableRecordCount) tableRecordCount.textContent = '';
+    tableBody.innerHTML = '';
+    csvOutput.textContent = '';
     inputEl.focus();
     showToast('Форму очищено');
 });
@@ -1554,15 +1633,17 @@ btnClear.addEventListener('click', () => {
 btnCopyTable.addEventListener('click', async () => {
     if (!currentParsedRecords || currentParsedRecords.length === 0) return;
     const withHeader = chkIncludeTableHeader.checked;
-    const targetRecord = currentParsedRecords[0];
-    const rowValues = ppo.COLUMNS.map(c => (targetRecord[c] !== undefined && targetRecord[c] !== null) ? String(targetRecord[c]) : '');
+    const count = currentParsedRecords.length;
 
     // Tab-separated text (TSV for Excel / Google Sheets)
     const tsvRows = [];
     if (withHeader) {
         tsvRows.push(ppo.COLUMNS.join('\t'));
     }
-    tsvRows.push(rowValues.join('\t'));
+    currentParsedRecords.forEach(rec => {
+        const rowValues = ppo.COLUMNS.map(c => (rec[c] !== undefined && rec[c] !== null) ? String(rec[c]) : '');
+        tsvRows.push(rowValues.join('\t'));
+    });
     const textToCopy = tsvRows.join('\r\n');
 
     // HTML table for rich clipboard paste
@@ -1570,7 +1651,12 @@ btnCopyTable.addEventListener('click', async () => {
     if (withHeader) {
         htmlTable += '<thead><tr>' + ppo.COLUMNS.map(c => `<th>${ppo.escapeXml(c)}</th>`).join('') + '</tr></thead>';
     }
-    htmlTable += '<tbody><tr>' + rowValues.map(v => `<td>${ppo.escapeXml(v)}</td>`).join('') + '</tr></tbody></table>';
+    htmlTable += '<tbody>';
+    currentParsedRecords.forEach(rec => {
+        const rowValues = ppo.COLUMNS.map(c => (rec[c] !== undefined && rec[c] !== null) ? String(rec[c]) : '');
+        htmlTable += '<tr>' + rowValues.map(v => `<td>${ppo.escapeXml(v)}</td>`).join('') + '</tr>';
+    });
+    htmlTable += '</tbody></table>';
 
     try {
         if (navigator.clipboard && window.ClipboardItem) {
@@ -1585,7 +1671,7 @@ btnCopyTable.addEventListener('click', async () => {
         } else {
             await navigator.clipboard.writeText(textToCopy);
         }
-        showToast('✓ Дані таблиці скопійовано у буфер обміну!');
+        showToast(`✓ Дані таблиці скопійовано (${count} записів)!`);
     } catch (err) {
         // Fallback for older browsers or file:// context
         const ta = document.createElement('textarea');
@@ -1594,13 +1680,14 @@ btnCopyTable.addEventListener('click', async () => {
         ta.select();
         document.execCommand('copy');
         document.body.removeChild(ta);
-        showToast('✓ Дані таблиці скопійовано у буфер обміну!');
+        showToast(`✓ Дані таблиці скопійовано (${count} записів)!`);
     }
 });
 
 // Download .xlsx file directly
 btnDownloadXlsx.addEventListener('click', () => {
     if (!currentParsedRecords || currentParsedRecords.length === 0) return;
+    const count = currentParsedRecords.length;
     try {
         const xlsxBytes = ppo.generateXlsxBlob(ppo.COLUMNS, currentParsedRecords);
         const blob = new Blob([xlsxBytes], {
@@ -1614,7 +1701,7 @@ btnDownloadXlsx.addEventListener('click', () => {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        showToast('✓ Файл .xlsx завантажено');
+        showToast(`✓ Файл .xlsx завантажено (${count} записів)`);
     } catch (err) {
         console.error(err);
         showToast('❌ Помилка при створенні .xlsx: ' + err.message);
@@ -1622,18 +1709,19 @@ btnDownloadXlsx.addEventListener('click', () => {
 });
 
 chkIncludeHeader.addEventListener('change', () => {
-    if (inputEl.value.trim()) {
-        renderCsv(inputEl.value.trim());
+    if (currentParsedRecords && currentParsedRecords.length > 0) {
+        renderCsv(currentParsedRecords);
     }
 });
 
 btnCopyCsv.addEventListener('click', async () => {
     const textToCopy = csvOutput.textContent;
     if (!textToCopy) return;
+    const count = currentParsedRecords ? currentParsedRecords.length : 1;
 
     try {
         await navigator.clipboard.writeText(textToCopy);
-        showToast('✓ Значення через кому скопійовано у буфер!');
+        showToast(`✓ CSV скопійовано (${count} рядків)!`);
     } catch (err) {
         // Fallback for older browsers or file:// context
         const ta = document.createElement('textarea');
@@ -1642,13 +1730,14 @@ btnCopyCsv.addEventListener('click', async () => {
         ta.select();
         document.execCommand('copy');
         document.body.removeChild(ta);
-        showToast('✓ Значення через кому скопійовано у буфер!');
+        showToast(`✓ CSV скопійовано (${count} рядків)!`);
     }
 });
 
 btnDownloadCsv.addEventListener('click', () => {
     const textToDownload = csvOutput.textContent;
     if (!textToDownload) return;
+    const count = currentParsedRecords ? currentParsedRecords.length : 1;
 
     const blob = new Blob(["\uFEFF" + textToDownload], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -1659,7 +1748,7 @@ btnDownloadCsv.addEventListener('click', () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    showToast('✓ Файл .csv завантажено');
+    showToast(`✓ Файл .csv завантажено (${count} рядків)`);
 });
 
 // Initialize table header on load
