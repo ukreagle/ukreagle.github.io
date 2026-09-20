@@ -547,7 +547,8 @@ const COLUMNS = [
     "14,5х114 БЗТ",
     "14,5х114 Б-32",
     "12,7х99",
-	"12/76",
+    "12x76",
+    "12x70",
     "7,62 ПС",
     "7,62 Т",
     "5,45 ПС",
@@ -682,7 +683,8 @@ function parseAmmo(fullText, lines) {
         "14,5х114 БЗТ": "",
         "14,5х114 Б-32": "",
         "12,7х99": "",
-		"12/76": "",
+        "12x76": "",
+        "12x70": "",
         "7,62 ПС": "",
         "7,62 Т": "",
         "5,45 ПС": "",
@@ -693,11 +695,9 @@ function parseAmmo(fullText, lines) {
         "НБЖ Ігла": ""
     };
 
-    // Зброя для визначення типу ПЗРК
     const weaponM = fullText.match(/Зброя[:\s]+([^\n\r]+)/i);
     const weaponStr = weaponM ? weaponM[1].toLowerCase() : "";
 
-    // Розхід ЗКР та НБЖ
     const zkrM = fullText.match(/(?:Розхід|Росхід|витрат[аи]?\s*БК[:\s]*)\s*ЗКР[\s\-]+(\d+)/i);
     const nbzhM = fullText.match(/(?:(?:Розхід|Росхід)[:\s\-]*|витрат[аи]?\s*БК[:\s]*)\s*(\d+)?\s*(?:НБЖ|Ндж)[\s\-]*(\d+)?/i);
 
@@ -716,6 +716,16 @@ function parseAmmo(fullText, lines) {
     } else if (weaponStr.includes("ігла") || weaponStr.includes("игла")) {
         if (zkrCnt) ammo["ЗКР Ігла"] = zkrCnt;
         if (nbzhCnt) ammo["НБЖ Ігла"] = nbzhCnt;
+    }
+    if (!ammo["НБЖ Ігла"] && (weaponStr.includes("ігла") || weaponStr.includes("игла"))) {
+        if (/(?:НБЖ|Ндж)/i.test(fullText)) {
+            ammo["НБЖ Ігла"] = 1;
+        }
+    }
+    if (!ammo["НБЖ Stinger"] && weaponStr.includes("stinger")) {
+        if (/(?:НБЖ|Ндж)/i.test(fullText)) {
+            ammo["НБЖ Stinger"] = 1;
+        }
     }
 
     // Виділення рядків секції БК
@@ -741,7 +751,7 @@ function parseAmmo(fullText, lines) {
                 ammoLines.push(line);
             }
         } else {
-            if (/(?:12[.,]7|12\s*(?:[\/хx×кk\s]|кал(?:\.|ібр)?)\s*7[06]|12\s*кал|картеч|дріб|14[.,]5|23\s*[хx]|7[.,]62|5[.,]45)[^\n\r]*?[\-–—:\s]\s*\d+/i.test(line)) {
+            if (/(?:12[.,]7(?![0-9])|12\s*(?:[.,\/\-xх×кk\s]|кал(?:\.|ібр)?)\s*7[06]|12\s*кал|помпа\s*12|картеч|дріб|14[.,]5|23\s*[хx]|7[.,]62|5[.,]45)[^\n\r]*?[\-–—:\s]\s*\d+/i.test(line)) {
                 if (!/^(?:Зброя|Засіб)/i.test(line)) {
                     ammoLines.push(line);
                 }
@@ -772,7 +782,7 @@ function parseAmmo(fullText, lines) {
     let total127 = 0;
     let found127 = false;
     for (const line of ammoLines) {
-        const re127 = /(?:12[.,]7\s*[хx×]\s*99(?:\s*мм)?|12[.,]7\s*мм|12[.,]70?)[^\d\n\r]*?[\-–—:]\s*(\d+)/gi;
+        const re127 = /(?:12[.,]7\s*[хx×]\s*99(?:\s*мм)?|12[.,]7\s*мм|12[.,]7(?![0-9]))[^\d\n\r]*?[\-–—:]\s*(\d+)/gi;
         let m;
         while ((m = re127.exec(line)) !== null) {
             total127 += parseInt(m[1], 10);
@@ -783,11 +793,10 @@ function parseAmmo(fullText, lines) {
         ammo["12,7х99"] = total127;
     }
 
-    // 4. 12/76
     let total1276 = 0;
     let found1276 = false;
     for (const line of ammoLines) {
-        const re1276 = /(?:(?:12\s*(?:[\/хx×кk\s]|кал(?:\.|ібр)?)\s*7[06]|12\s*кал(?:\.|ібр)?|наб[оії]+\s+12[\/хx×кk\s]7[06]|картеч|дріб)(?:\s*мм)?)[^\d\n\r]*?[\-–—:\s]\s*(\d+)/gi;
+        const re1276 = /(?:(?:12\s*(?:[.,\/\-xх×кk\s]|кал(?:\.|ібр)?)\s*76|12\s*кал(?:\.|ібр)?|наб[оії]+\s+12[.,\/\-xх×кk\s]76|картеч|дріб)(?:\s*мм)?)[^\d\n\r]*?[\-–—:\s]\s*(\d+)/gi;
         let m;
         while ((m = re1276.exec(line)) !== null) {
             total1276 += parseInt(m[1], 10);
@@ -795,14 +804,35 @@ function parseAmmo(fullText, lines) {
         }
     }
     if (!found1276) {
-        const mFull = fullText.match(/(?:^|\n)\s*(?:(?:\d+[).]\s*)?(?:Витрат[аи]?\s*БК[:\s]*)?)?(?:(?:12\s*(?:[\/хx×кk\s]|кал(?:\.|ібр)?)\s*7[06]|12\s*кал(?:\.|ібр)?|наб[оії]+\s+12[\/хx×кk\s]7[06]|картеч|дріб)(?:\s*мм)?)[^\d\n\r]*?[\-–—:\s]\s*(\d+)/i);
-        if (mFull) {
-            total1276 = parseInt(mFull[1], 10);
+        const mFull76 = fullText.match(/(?:^|\n)\s*(?:(?:\d+[).]\s*)?(?:Витрат[аи]?\s*БК[:\s]*)?)?(?:(?:12\s*(?:[.,\/\-xх×кk\s]|кал(?:\.|ібр)?)\s*76|12\s*кал(?:\.|ібр)?|наб[оії]+\s+12[.,\/\-xх×кk\s]76|картеч|дріб)(?:\s*мм)?)[^\d\n\r]*?[\-–—:\s]\s*(\d+)/i);
+        if (mFull76) {
+            total1276 = parseInt(mFull76[1], 10);
             found1276 = true;
         }
     }
     if (found1276) {
-        ammo["12/76"] = total1276;
+        ammo["12x76"] = total1276;
+    }
+
+    let total1270 = 0;
+    let found1270 = false;
+    for (const line of ammoLines) {
+        const re1270 = /(?:(?:12\s*(?:[.,\/\-xх×кk\s]|кал(?:\.|ібр)?)\s*70|12[.,]70|помпа\s*12\s*к[а-я]*|наб[оії]+\s+12[.,\/\-xх×кk\s]70)(?:\s*мм)?)[^\d\n\r]*?[\-–—:\s]\s*(\d+)/gi;
+        let m;
+        while ((m = re1270.exec(line)) !== null) {
+            total1270 += parseInt(m[1], 10);
+            found1270 = true;
+        }
+    }
+    if (!found1270) {
+        const mFull70 = fullText.match(/(?:^|\n)\s*(?:(?:\d+[).]\s*)?(?:Витрат[аи]?\s*БК[:\s]*)?)?(?:(?:12\s*(?:[.,\/\-xх×кk\s]|кал(?:\.|ібр)?)\s*70|12[.,]70|помпа\s*12\s*к[а-я]*|наб[оії]+\s+12[.,\/\-xх×кk\s]70)(?:\s*мм)?)[^\d\n\r]*?[\-–—:\s]\s*(\d+)/i);
+        if (mFull70) {
+            total1270 = parseInt(mFull70[1], 10);
+            found1270 = true;
+        }
+    }
+    if (found1270) {
+        ammo["12x70"] = total1270;
     }
 
     // 4. 7,62
@@ -891,7 +921,14 @@ function cleanGroupStr(str) {
     val = val.replace(/\[[^\]]*$/g, "");
     val = val.replace(/(^|[^\p{L}\p{N}])(?:МВГ|ВГ|MVG|VG)(?=[^\p{L}\p{N}]|$)/giu, " ");
     val = val.replace(/["'«»“”]/g, "");
-    return cleanVal(val);
+    val = cleanVal(val);
+    let vUpper = val.toUpperCase().trim();
+    vUpper = vUpper.replace(/^[\-–—\s]+/, "");
+    const groupNumMatch = vUpper.match(/^([А-ЯЄІЇҐA-Z]+)[\s\-–—]*(\d+)(?:\b|[^\p{L}\p{N}]|$)/iu);
+    if (groupNumMatch) {
+        return `${groupNumMatch[1]}-${groupNumMatch[2]}`;
+    }
+    return vUpper;
 }
 
 function extractGroupName(fullText) {
@@ -985,10 +1022,12 @@ function extractPersonnel(fullText, lines) {
         }
     }
 
-    // 4. Пошук звань та прізвищ у полі 'Опис:' або по всьому тексту формуляру
     if (people.length === 0) {
-        const rankPattern = '(?:г[\\-.]?л|ген(?:ерал)?|п\\.?п[\\-.]?к|підполк(?:овник)?|п[\\-.]?к|полк(?:овник)?|м[\\-.]?р|майор|к[\\-.]?н|кап(?:ітан)?|ст\\.?\\s*(?:л[\\-.]?т|лейт(?:енант)?)|мол\\.?\\s*(?:л[\\-.]?т|лейт(?:енант)?)|(?:м|мл)\\.?\\s*л[\\-.]?т|л[\\-.]?т|лейт(?:енант)?|гол\\.?\\s*(?:майстер[\\-.]?)?(?:с[\\-.]?нт|с[\\-.]?т|серж(?:ант)?)|(?:штаб|майстер)[\\-.]?(?:с[\\-.]?нт|с[\\-.]?т|серж(?:ант)?)|ст\\.?\\s*(?:с[\\-.]?нт|с[\\-.]?т|серж(?:ант)?)|мол\\.?\\s*(?:с[\\-.]?нт|с[\\-.]?т|серж(?:ант)?)|(?:м|мл)\\.?\\s*с[\\-.]?т|с[\\-.]?нт|с[\\-.]?т|серж(?:ант)?|ст\\.?\\s*(?:солд(?:ат)?|матрос)|солд(?:ат)?|сол\\b|матрос)';
-        const reP = new RegExp('(?:^|[\\s,;])(' + rankPattern + '[\\.\\s]+[А-ЯЄІЇҐ][а-яёіїєґa-z0-9\\-]*(?:[ \\t]+[А-ЯЄІЇҐ]\\.(?:[ \\t]*[А-ЯЄІЇҐ]\\.)?|[ \\t]+[А-ЯЄІЇҐ]{1,2}\\b\\.?|[ \\t]+[А-ЯЄІЇҐ][а-яёіїєґa-z0-9\\-]+)?)', 'gi');
+        const rankCompound = '(?:гол[\\.\\s]*(?:майстер[\\-.]?)?(?:с[\\-.]?нт|с[\\-–—]т|серж(?:ант)?)|(?:штаб|майстер)[\\-.]?(?:с[\\-.]?нт|с[\\-–—]т|серж(?:ант)?)|ст[\\.\\s]*(?:солд(?:ат)?|матрос|с[\\-.]?нт|с[\\-–—]т|серж(?:ант)?|л[\\-.]?т|лейт(?:енант)?)|мол[\\.\\s]*(?:с[\\-.]?нт|с[\\-–—]т|серж(?:ант)?|л[\\-.]?т|лейт(?:енант)?)|(?:м|мл)[\\.\\s]*(?:с[\\-.]?т|л[\\-.]?т))';
+        const rankSingle = '(?:г[\\-.]?л|ген(?:ерал)?|п\\.?п[\\-.]?к|підполк(?:овник)?|п[\\-.]?к|полк(?:овник)?|м[\\-.]?р|майор|к[\\-.]?н|кап(?:ітан)?|лейт(?:енант)?|л[\\-.]?т|сержант|серж|с[\\-.]?нт|с[\\-–—]т|с\\.т\\.|солд(?:ат)?|сол\\b|матрос)';
+        const rankPattern = '(?:' + rankCompound + '|' + rankSingle + ')';
+        const namePattern = '[А-ЯЄІЇҐ][а-яёіїєґa-z0-9\\-]*(?:[ \\t]+[А-ЯЄІЇҐ]\\.(?:[ \\t]*[А-ЯЄІЇҐ]\\.)?|[ \\t]+[А-ЯЄІЇҐ]{1,2}(?=[,;\\s.\\n\\r]|$)|[ \\t]+[А-ЯЄІЇҐ][а-яёіїєґa-z0-9\\-]+(?:[ \\t]+[А-ЯЄІЇҐ][а-яёіїєґa-z0-9\\-]+)?)?';
+        const reP = new RegExp('(?:^|[\\s,;])(' + rankPattern + '[\\.\\s]+' + namePattern + ')', 'gi');
         let pm;
         while ((pm = reP.exec(fullText)) !== null) {
             const sp = cleanVal(pm[1]);
@@ -1108,12 +1147,15 @@ function parseFormular(block) {
     const hM = fullText.match(/(?:Висота[:\s\-]*|(?:^|[\s,;.\-])В\s*[:\-])\s*(\d+)/i);
     if (hM) res["Висота"] = parseInt(hM[1], 10);
 
-    // 10. ТИП ЦІЛІ & 11. НОМЕР ЦІЛІ
     const numM = fullText.match(/(?:^|\n)[ \t]*(?:\d+[).]\s*)?(?:№\s*цілі|Номер\s*цілі|Номер(?!\s*цілі))[ \t\-:]*([^\n\r]*)/i);
     if (numM) {
         let nVal = numM[1].trim();
         const digits = nVal.match(/\d+/);
-        res["Номер цілі"] = digits ? digits[0] : "";
+        if (digits && /^0+$/.test(digits[0])) {
+            res["Номер цілі"] = "";
+        } else {
+            res["Номер цілі"] = digits ? digits[0] : "";
+        }
     }
 
     const typeM = fullText.match(/(?:(?:^|\n)\s*(?:\d+[).]\s*)?Тип\s*цілі[ \t\-:]+)([^\n\r]+)/i);
@@ -1135,25 +1177,23 @@ function parseFormular(block) {
         }
     }
 
-    // Якщо замість номера вказано тип
     if (res["Номер цілі"] && /(?:^|[^а-яёіїєґa-z])(гербера|шахед|літак|крило)(?:[^а-яёіїєґa-z]|$)/i.test(res["Номер цілі"])) {
         if (!res["Тип цілі"]) {
             res["Тип цілі"] = res["Номер цілі"];
         }
-        res["Номер цілі"] = "б/н";
+        res["Номер цілі"] = "";
     }
 
-    // 12. РЕЗУЛЬТАТ
     let rawResult = "";
     const resM = fullText.match(/(?:(?:^|\n)\s*(?:\d+[).]\s*)?Результат[:\s\-]+)([^\n\r]+)/i);
     if (resM) {
         rawResult = cleanVal(resM[1]);
     } else {
-        const resM2 = fullText.match(/(?:^|\n)\s*(?:\d+[).]\s*)?(не\s*знищено[^\n\r]*|знищено[^\n\r]*|обстрілян[оа][^\n\r]*|застосовувались[^\n\r]*)/i);
+        const resM2 = fullText.match(/(?:^|\n)\s*(?:\d+[).]\s*)?(не\s*знищено[^\n\r]*|знищено[^\n\r]*|обстрілян[оа][^\n\r]*|застосовувались[^\n\r]*|і?ймовірно\s*знищено[^\n\r]*)/i);
         if (resM2) {
             rawResult = cleanVal(resM2[1]);
         } else {
-            const anyM = fullText.match(/\b(не\s*знищено|знищено)\b/i);
+            const anyM = fullText.match(/\b(не\s*знищено|знищено|і?ймовірно\s*знищено)\b/i);
             if (anyM) {
                 rawResult = cleanVal(anyM[1]);
             }
@@ -1161,7 +1201,7 @@ function parseFormular(block) {
     }
 
     if (rawResult) {
-        if (/не\s*знищено/i.test(rawResult)) {
+        if (/не\s*зарах(?:ував|овано)/i.test(rawResult) || /не\s*знищено/i.test(rawResult)) {
             res["Результат"] = "Застосування";
         } else if (/знищено/i.test(rawResult)) {
             res["Результат"] = "ЗБИТТЯ";
