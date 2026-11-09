@@ -170,6 +170,17 @@
             background-color: var(--primary);
         }
 
+        .btn-vutson {
+            background-color: #4338ca;
+            color: #ffffff;
+            font-weight: 600;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+
+        .btn-vutson:hover {
+            background-color: #3730a3;
+        }
+
         .btn-secondary {
             background-color: #f1f5f9;
             color: #334155;
@@ -441,10 +452,38 @@
                 <button type="button" class="btn-primary" id="btnParse">
                     <span>⚡ Парсинг</span>
                 </button>
+                <button type="button" class="btn-vutson" id="btnVutson">
+                    <span>🎯 VUTSON</span>
+                </button>
             </div>
             <div>
                 <button type="button" class="btn-outline" id="btnClear">
                     <span>🗑️ Очистити</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- VUTSON Formular Section -->
+    <div class="card" id="vutsonArea" style="display: none;">
+        <div class="card-header">
+            <div class="card-title">
+                <span>🎯 Формуляр VUTSON</span>
+                <span id="vutsonRecordCount" style="margin-left: 8px; font-size: 0.85rem; font-weight: normal; color: var(--text-muted);"></span>
+            </div>
+            <div class="btn-group">
+                <button type="button" class="btn-copy" id="btnCopyVutson">
+                    <span>📋 Скопіювати у буфер обміну</span>
+                </button>
+            </div>
+        </div>
+
+        <textarea id="vutsonText" rows="22" placeholder="Результат перетворення у форму звіту VUTSON..."></textarea>
+
+        <div class="actions-row">
+            <div class="btn-group">
+                <button type="button" class="btn-copy" id="btnCopyVutsonBottom">
+                    <span>📋 Скопіювати у буфер обміну</span>
                 </button>
             </div>
         </div>
@@ -478,7 +517,7 @@
 
             <div class="table-toolbar">
                 <label class="checkbox-label">
-                    <input type="checkbox" id="chkIncludeTableHeader" checked>
+                    <input type="checkbox" id="chkIncludeTableHeader" unchecked>
                     <span>Додати рядок із назвами колонок</span>
                 </label>
 
@@ -623,8 +662,8 @@ function splitFormulars(content) {
         else if (/^\s*(?:Формуляр|Звіт|Застосування)\b/i.test(l)) {
             isStart = true;
         }
-        // 3. 'Дата:'
-        else if (/^Дата\s*:/i.test(l)) {
+        // 3. 'Дата:' або 'Дата ...'
+        else if (/^Дата\s*[:.]/i.test(l) || /^Дата\s+\d/i.test(l)) {
             // Якщо одразу перед цим протягом 1-2 рядків був 'Час:', це той самий формуляр
             if (starts.length > 0 && (i - starts[starts.length - 1] <= 2) && /^\s*Час\b/i.test(lines[starts[starts.length - 1]].trim())) {
                 isStart = false;
@@ -646,7 +685,7 @@ function splitFormulars(content) {
         }
         // 6. 'Час: HH:MM' після порожнього рядка або на початку тексту, якщо попередній рядок не був 'Дата:'
         else if (/^\s*Час\s*[:.\s]+\d{1,2}[:.]\d{2}/i.test(l)) {
-            if (lastNonEmptyIdx === -1 || (lastNonEmptyIdx < i - 1 && !/^Дата\s*:/i.test(lines[lastNonEmptyIdx].trim()))) {
+            if (lastNonEmptyIdx === -1 || (lastNonEmptyIdx < i - 1 && !/^Дата\b/i.test(lines[lastNonEmptyIdx].trim()))) {
                 isStart = true;
             }
         }
@@ -973,6 +1012,23 @@ function extractPersonnel(fullText, lines) {
         }
     }
 
+    // 1.5. Особовий склад у рядку 'Опис:'
+    if (people.length === 0) {
+        const opisM = fullText.match(/(?:(?:^|\n)\s*Опис[:\s]+)([^\n\r]+)/i);
+        if (opisM) {
+            const rawOpis = opisM[1];
+            const items = rawOpis.split(rankDelimiter);
+            for (let it of items) {
+                it = cleanVal(it);
+                if (it && /^(?:(?:гол|ст|мол|мл|гл)?[\.\s]*(?:с[\-.]?нт|с[\-.]?т|солд|солдат|сол|к[\-.\s]*н|капітан|сержант|лейтенант|л[\-.]?т))/i.test(it)) {
+                    if (!people.includes(it)) {
+                        people.push(it);
+                    }
+                }
+            }
+        }
+    }
+
     // 2. Нумеровані пункти особового складу
     if (people.length === 0) {
         for (const line of lines) {
@@ -1266,6 +1322,616 @@ function parseFormular(block) {
     return res;
 }
 
+function isVutsonFormat(block) {
+    if (!block || typeof block !== "string") return false;
+    const lines = block.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+    // Якщо присутні окремі рядки старого формату (Азимут, Курс, Дальність, Тип цілі тощо) - це не VUTSON
+    const hasLegacyFields = lines.some(l => /^(?:\d+[).:]\s*)?(?:Азимут|Курс|Дальність|Відстань|Дистанція|Тип цілі|Витрати БК)\b/i.test(l));
+    if (hasLegacyFields) return false;
+
+    // У форматі VUTSON обов'язково є рядок 'Опис:'
+    const hasOpis = lines.some(l => /^Опис\s*[:.]/i.test(l));
+    if (!hasOpis) return false;
+
+    let score = 0;
+    if (lines.some(l => /^Дата\s*[:.]/i.test(l))) score++;
+    if (lines.some(l => /^Час\s*[:.]/i.test(l))) score++;
+    if (lines.some(l => /^(?:№|Номер)\s*цілі\s*[:.]/i.test(l))) score++;
+    if (lines.some(l => /^Результат\s*[:.]/i.test(l))) score++;
+    if (lines.some(l => /^Зброя\s*[:.]/i.test(l))) score++;
+    if (lines.some(l => /^Н\.?\s*П\.?\s*[:.]/i.test(l))) score++;
+    if (lines.some(l => /^Підрозділ\s*[:.]/i.test(l))) score++;
+    if (lines.some(l => /^Позивний\s*[:.]/i.test(l))) score++;
+    if (lines.some(l => /^Коментар\s*[:.]/i.test(l))) score++;
+
+    return score >= 3;
+}
+
+function normalizeVutsonWeaponLine(raw) {
+    if (!raw) return "зі стрілецької зброї 5.45/5.56";
+    const trimmed = raw.trim();
+    if (/^із\s|^зі\s/i.test(trimmed)) {
+        return trimmed;
+    }
+    const weaponsList = [];
+    const lower = trimmed.toLowerCase();
+    if (/stinger|стінгер/i.test(lower)) weaponsList.push("із ПЗРК Stinger");
+    if (/ігла|игла/i.test(lower)) weaponsList.push("із ПЗРК Ігла-1");
+    if (/зу[-\s]?23|23мм|23\s*[хx]\s*152/i.test(lower)) weaponsList.push("із ЗУ 23-2 23мм");
+    if (/viktor|mr[-\s]?2|віктор/i.test(lower)) weaponsList.push("із ЗКУ Viktor MR-2 14.5");
+    if (!/viktor|mr[-\s]?2|віктор/i.test(lower) && (/зпу|кпвт|14[.,]5/i.test(lower))) weaponsList.push("із ЗПУ 14.5");
+    if (/browning|браунінг/i.test(lower)) weaponsList.push("із ВКК Browning M2 12.7");
+    if (/canik|канік/i.test(lower)) weaponsList.push("із ВКК Canik M2 12.7");
+    if (/sar[-\s]?127|сар[-\s]?127/i.test(lower)) weaponsList.push("із ВКК SAR 127 MT 12.7");
+    if (!/browning|браунінг|canik|канік|sar[-\s]?127|сар[-\s]?127/i.test(lower) && (/(?:^|[^а-яіїєґa-z0-9])вкк(?:[^а-яіїєґa-z0-9]|$)/i.test(lower) || /12[.,]7(?![0-9])|дшк|утёс|утьос|корд|нсвт/i.test(lower))) weaponsList.push("із ВКК 12.7");
+    if (/помпа|12\s*к(?:ал)?|дріб|картеч|рушниц/i.test(lower)) weaponsList.push("із гладкоствольної зброї 12к");
+    if (/ак[-\s]?74|ак|стрілецьк|5[.,]45|5[.,]56|автомат/i.test(lower)) {
+        weaponsList.push(weaponsList.length > 0 ? "зі стрілецької зброї 5.45/5.56" : "із стрілецької зброї 5.45/5.56");
+    }
+    return weaponsList.length > 0 ? weaponsList.join(", ") : trimmed;
+}
+
+function normalizeVutson(block) {
+    const rawLines = block.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+    let dateStr = "";
+    let timeStr = "";
+    let targetStr = "";
+    let resultStr = "";
+    let npStr = "";
+    let oblStr = "";
+    let unitStr = "";
+    let callsignStr = "";
+    let weaponStr = "";
+    let heightStr = "";
+    let opisStr = "";
+    const commentLines = [];
+    const ammoLines = [];
+    const personnelPending = [];
+
+    let inCommentSection = false;
+    let commentHeaderFound = false;
+
+    for (let i = 0; i < rawLines.length; i++) {
+        const line = rawLines[i];
+
+        // 1. ДАТА
+        if (/^Дата\s*[:.]?/i.test(line)) {
+            const m = line.match(/^Дата\s*[:.]?\s*(\d{1,2})[.\s/\\-]+(\d{1,2})(?:[.\s/\\-]+(\d{2,4}))?/i);
+            if (m) {
+                const d = m[1].padStart(2, '0');
+                const mo = m[2].padStart(2, '0');
+                let y = m[3] || "2026";
+                if (y.length === 2) y = "20" + y;
+                dateStr = `Дата: ${d}.${mo}.${y}`;
+            } else {
+                dateStr = line.replace(/^Дата\s*[:.]?\s*/i, "Дата: ");
+            }
+            continue;
+        }
+
+        // 2. ЧАС
+        if (/^Час\s*[:.]?/i.test(line)) {
+            const m = line.match(/^Час\s*[:.]?\s*(\d{1,2})[\s:.]+(\d{2})/i);
+            if (m) {
+                const h = m[1].padStart(2, '0');
+                const min = m[2].padStart(2, '0');
+                timeStr = `Час: ${h}:${min}`;
+            } else {
+                timeStr = line.replace(/^Час\s*[:.]?\s*/i, "Час: ");
+            }
+            continue;
+        }
+
+        // 3. № ЦІЛІ
+        if (/^(?:№|Номер)\s*цілі\s*[:.]?/i.test(line)) {
+            let val = line.replace(/^(?:№|Номер)\s*цілі\s*[:.]?\s*/i, "").trim();
+            if (!val || /^(?:б[\/.]?н|н[\/.]?б|без)\.?$/i.test(val)) {
+                targetStr = "№ цілі: б/н";
+            } else if (/^(?:б[\/.]?в|н[\/.]?в|без\s*видач[іе])\.?$/i.test(val)) {
+                targetStr = "№ цілі: б/в";
+            } else {
+                const digits = val.match(/\d+/);
+                if (digits && !/^0+$/.test(digits[0])) {
+                    targetStr = `№ цілі: ${digits[0]}`;
+                } else {
+                    targetStr = "№ цілі: б/н";
+                }
+            }
+            continue;
+        }
+
+        // 4. РЕЗУЛЬТАТ
+        if (/^Результат\s*[:.]?/i.test(line)) {
+            let val = line.replace(/^Результат\s*[:.]?\s*/i, "").trim();
+            if (/вибух/i.test(val) && !/не\s*знищено|обстрілян/i.test(val)) {
+                resultStr = "Результат: вибух";
+            } else if (/знищен/i.test(val) && !/не\s*знищен|не\s*вражен|не\s*уражен|не\s*зарах|і?ймовірно/i.test(val)) {
+                resultStr = "Результат: ЗНИЩЕНО";
+            } else {
+                resultStr = "Результат: не знищено";
+            }
+            continue;
+        }
+
+        // 5. Н.П.
+        if (/^Н\.?\s*П\.?\s*[:.]?/i.test(line)) {
+            let val = line.replace(/^Н\.?\s*П\.?\s*[:.]?\s*/i, "").trim();
+            val = val.replace(/["'«»“”]/g, "").trim().toUpperCase();
+            npStr = `Н.П.: ${val}`;
+            continue;
+        }
+
+        // 6. ОБЛАСТЬ
+        if (/^Обл\.?\s*[:.]?/i.test(line)) {
+            let val = line.replace(/^Обл\.?\s*[:.]?\s*/i, "").trim();
+            val = val.replace(/\s*обл(?:\.|асть)?$/i, "").trim();
+            oblStr = `Обл.: ${val}`;
+            continue;
+        }
+
+        // 7. ПІДРОЗДІЛ
+        if (/^Підрозділ\s*[:.]?/i.test(line)) {
+            let val = line.replace(/^Підрозділ\s*[:.]?\s*/i, "").trim();
+            if (!/\(ПС\)/i.test(val)) {
+                val = val ? `${val} (ПС)` : "(ПС)";
+            }
+            unitStr = `Підрозділ: ${val}`;
+            continue;
+        }
+
+        // 8. ПОЗИВНИЙ
+        if (/^Позивний\s*[:.]?/i.test(line)) {
+            let val = line.replace(/^Позивний\s*[:.]?\s*/i, "").trim();
+            callsignStr = `Позивний: ${val}`;
+            continue;
+        }
+
+        // 9. ЗБРОЯ
+        if (/^Зброя\s*[:.]?/i.test(line)) {
+            let val = line.replace(/^Зброя\s*[:.]?\s*/i, "").trim();
+            weaponStr = `Зброя: ${normalizeVutsonWeaponLine(val)}`;
+            continue;
+        }
+
+        // 10. ВИСОТА
+        if (/^Висота\s*[:.]?/i.test(line)) {
+            let val = line.replace(/^Висота\s*[:.]?\s*/i, "").trim();
+            const d = val.match(/\d+/);
+            let h = d ? parseInt(d[0], 10) : 100;
+            if (h < 100) h = 100;
+            heightStr = `Висота: ${String(h).slice(0, 4)}`;
+            continue;
+        }
+
+        // 11. ОПИС
+        if (/^Опис\s*[:.]?/i.test(line)) {
+            let val = line.replace(/^Опис\s*[:.]?\s*/i, "").trim();
+            const adkM = val.match(/^[^\d]*?А\s*[:\-–—]?\s*(\d+)[,\s;]+Д\s*[:\-–—]?\s*(\d+)[,\s;]+К\s*[:\-–—]?\s*(\d+)[,\s;]*(.*)$/i);
+            if (adkM) {
+                const a = adkM[1];
+                const d = adkM[2];
+                const k = adkM[3];
+                let rest = adkM[4].trim();
+                opisStr = `Опис: А-${a}, Д-${d}, К-${k}, ${rest}`;
+            } else {
+                opisStr = `Опис: ${val}`;
+            }
+            continue;
+        }
+
+        // 12. КОМЕНТАР
+        if (/^Коментар\s*[:.]?/i.test(line)) {
+            inCommentSection = true;
+            commentHeaderFound = true;
+            let val = line.replace(/^Коментар\s*[:.]?\s*/i, "").trim();
+            if (val && val !== "-") {
+                commentLines.push(val);
+            }
+            continue;
+        }
+
+        // Боєприпаси
+        if (/^(?:Набій|Розхід|Росхід)/i.test(line) || /^\d+[.,]\d+\s*[хx×]\s*\d+/i.test(line) || /^(?:ЗКР|НБЖ)(?:\s*[:.\s\-]|$)/i.test(line)) {
+            let norm = line.replace(/[\u2013\u2014]/g, "-");
+            norm = norm.replace(/\s*-\s*/, " - ");
+            norm = norm.replace(/\s*шт\.?$/gi, "").trim();
+            norm = norm.replace(/^Росхід/i, "Розхід");
+            norm = norm.replace(/(?:^|[^а-яіїєґa-z0-9])Ндж(?:[^а-яіїєґa-z0-9]|$)/gi, (m) => m.replace(/Ндж/i, "НБЖ"));
+            ammoLines.push(norm);
+            continue;
+        }
+
+        // Рядки після заголовка Коментар
+        if (inCommentSection) {
+            if (/^(?:солд|ст\.?\s*солд|мол\.?\s*с-нт|с-нт|ст\.?\s*с-нт|гол\.?\s*с-нт|лейт|ст\.?\s*лейт|кап)/i.test(line)) {
+                personnelPending.push(line);
+            } else if (line !== "-") {
+                commentLines.push(line);
+            }
+            continue;
+        }
+
+        // Рядки до коментаря
+        if (/^(?:солд|ст\.?\s*солд|мол\.?\s*с-нт|с-нт|ст\.?\s*с-нт|гол\.?\s*с-нт|лейт|ст\.?\s*лейт|кап)/i.test(line)) {
+            personnelPending.push(line);
+        } else if (!commentHeaderFound) {
+            commentLines.push(line);
+        }
+    }
+
+    if (personnelPending.length > 0 && opisStr) {
+        const hasPeopleInOpis = /(?:солд|с-нт|лейт|кап)/i.test(opisStr);
+        if (!hasPeopleInOpis) {
+            opisStr += ", " + personnelPending.join(", ");
+        }
+    }
+
+    let finalComment = "Коментар: -";
+    if (commentLines.length > 0) {
+        finalComment = `Коментар: ${commentLines.join("\n")}`;
+    }
+
+    if (!dateStr) {
+        const now = new Date();
+        dateStr = `Дата: ${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
+    }
+    if (!timeStr) timeStr = "Час: 00:00";
+    if (!targetStr) targetStr = "№ цілі: б/н";
+    if (!resultStr) resultStr = "Результат: не знищено";
+    if (!npStr) npStr = "Н.П.: ";
+    if (!oblStr) oblStr = "Обл.: ";
+    if (!unitStr) unitStr = "Підрозділ: (ПС)";
+    if (!callsignStr) callsignStr = "Позивний: ";
+    if (!weaponStr) weaponStr = "Зброя: зі стрілецької зброї 5.45/5.56";
+    if (!heightStr) heightStr = "Висота: 100";
+    if (!opisStr) opisStr = "Опис: А-0, Д-0, К-0, обстріляно 1 БПЛА Shahed";
+
+    const result = [
+        dateStr,
+        timeStr,
+        targetStr,
+        resultStr,
+        npStr,
+        oblStr,
+        unitStr,
+        callsignStr,
+        weaponStr,
+        heightStr,
+        opisStr,
+        finalComment
+    ];
+
+    if (ammoLines.length > 0) {
+        result.push(...ammoLines);
+    }
+
+    return result.join("\n");
+}
+
+function convertLegacyToVutson(block) {
+    const lines = block.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const fullText = lines.join("\n");
+    const parsed = parseFormular(block);
+
+    // 1. ДАТА
+    let dateStr = "";
+    if (parsed["Дата"]) {
+        dateStr = parsed["Дата"];
+    } else {
+        const dM = fullText.match(/(?:Дата\s*[:.]?\s*|\/\s*Дата\s*[:.]?\s*|(?:^|[\s,;])дата\s+)(3[01]|[12]\d|0?[1-9])[.\s/\\-]+(1[0-2]|0?[1-9])(?:[.\s/\\-]+(\d{2,4}))?/i);
+        if (dM) {
+            const d = String(parseInt(dM[1], 10)).padStart(2, '0');
+            const m = String(parseInt(dM[2], 10)).padStart(2, '0');
+            let y = dM[3] || "2026";
+            if (y.length === 2) y = "20" + y;
+            dateStr = `${d}.${m}.${y}`;
+        }
+    }
+    if (!dateStr) {
+        const now = new Date();
+        dateStr = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
+    }
+
+    // 2. ЧАС
+    let timeStr = "";
+    if (parsed["Час"]) {
+        timeStr = parsed["Час"];
+    } else {
+        const tM = fullText.match(/Ч(?:ас)?[:.\s]*(\d{1,2})[\s:.]*(\d{2})/i);
+        if (tM) {
+            timeStr = `${String(parseInt(tM[1], 10)).padStart(2, '0')}:${String(parseInt(tM[2], 10)).padStart(2, '0')}`;
+        } else {
+            timeStr = "00:00";
+        }
+    }
+
+    // 3. № ЦІЛІ
+    let targetNum = "";
+    const rawNumM = fullText.match(/(?:^|\n)[ \t]*(?:\d+[).]\s*)?(?:№\s*цілі|Номер\s*цілі|Номер(?!\s*цілі))[ \t\-:]*([^\n\r]*)/i);
+    let rawNum = rawNumM ? rawNumM[1].trim() : "";
+
+    if (/^(?:б[\/.]?в|без\s*видач[іе]|н[\/.]?в)\.?$/i.test(rawNum) || /\b(?:без\s*видачі|б\/в)\b/i.test(fullText)) {
+        targetNum = "б/в";
+    } else if (/^(?:б[\/.]?н|н[\/.]?б|без)\.?$/i.test(rawNum) || !rawNum) {
+        targetNum = "б/н";
+    } else {
+        const digits = rawNum.match(/\d+/);
+        if (digits && !/^0+$/.test(digits[0])) {
+            targetNum = digits[0];
+        } else {
+            targetNum = "б/н";
+        }
+    }
+
+    // 4. РЕЗУЛЬТАТ
+    let resultStr = "не знищено";
+    const resM = fullText.match(/(?:Результат[:\s\-]+)([^\n\r]+)/i);
+    const rawRes = resM ? resM[1].trim() : fullText;
+
+    if (/вибух/i.test(rawRes) && !/не\s*знищено|обстрілян/i.test(rawRes)) {
+        resultStr = "вибух";
+    } else if (/знищен/i.test(rawRes) && !/не\s*знищен|не\s*вражен|не\s*уражен|не\s*зарах|і?ймовірно/i.test(rawRes)) {
+        resultStr = "ЗНИЩЕНО";
+    } else {
+        resultStr = "не знищено";
+    }
+
+    // 5. Н.П.
+    let settlement = "";
+    if (parsed["Населений пункт"]) {
+        settlement = cleanSettlement(parsed["Населений пункт"]);
+    }
+    if (!settlement) {
+        const npM = fullText.match(/(?:Н[.\s]*П[.:\s]+|Населений\s*(?:пункт)?[:\s]+|н[.\s]*п[.:\s]+)([^\n\r,]+)/i);
+        if (npM) settlement = cleanSettlement(npM[1]);
+    }
+    settlement = settlement.replace(/["'«»“”]/g, "").trim();
+    if (settlement) {
+        settlement = settlement.toUpperCase();
+    }
+
+    // 6. ОБЛАСТЬ
+    let region = "";
+    if (parsed["Область"]) {
+        region = parsed["Область"];
+    }
+    if (!region) {
+        const oblM = fullText.match(/(?:Обл[.:\s]+)([^\n\r,]+)/i);
+        if (oblM) region = cleanVal(oblM[1]);
+    }
+    region = region.replace(/\s*обл(?:\.|асть)?$/i, "").trim();
+
+    // 7. ПІДРОЗДІЛ
+    let unit = "";
+    const unitM = fullText.match(/(?:^|\n)\s*Підрозділ[:\s]+([^\n\r]+)/i);
+    if (unitM) {
+        unit = cleanVal(unitM[1]);
+    } else if (parsed["Підрозділ"]) {
+        unit = parsed["Підрозділ"];
+    }
+    if (unit) {
+        if (!/\(ПС\)/i.test(unit)) {
+            unit = `${unit} (ПС)`;
+        }
+    } else {
+        unit = "(ПС)";
+    }
+
+    // 8. ПОЗИВНИЙ
+    let callsign = "";
+    const callM = fullText.match(/(?:^|\n)\s*Позивний[:\s]+([^\n\r]+)/i);
+    if (callM) {
+        callsign = cleanVal(callM[1]);
+    } else {
+        const mvgLineM = fullText.match(/(?:^|\n)\s*(?:\d+[).]\s*)?(?:МВГ|ВГ)[:\s\-]+([^\n\r]+)/i);
+        if (mvgLineM) {
+            let rawCall = mvgLineM[1].replace(/\([^)]*\)/g, "").trim();
+            rawCall = rawCall.replace(/["'«»“”]/g, "").trim();
+            if (/^(?:МВГ|ВГ)\b/i.test(rawCall)) {
+                callsign = rawCall;
+            } else {
+                callsign = `МВГ ${rawCall}`;
+            }
+        }
+    }
+    if (!callsign && parsed["Назва групи"]) {
+        callsign = `МВГ ${parsed["Назва групи"]}`;
+    }
+
+    // 9. ЗБРОЯ (ізолюємо від рядків боєприпасів)
+    let textToScanWeapon = "";
+    const rawWM = fullText.match(/(?:^|\n)\s*(?:\d+[).]\s*)?(?:Зброя|Засіб(?:\s*\(зброя\))?|Озброєння)[:\s\-]+([^\n\r]+)/i);
+    if (rawWM) {
+        textToScanWeapon = rawWM[1];
+    } else {
+        textToScanWeapon = lines
+            .filter(l => !/^(?:Набій|Розхід|Росхід|Витрат|БК|12[.,]7|5[.,]45|7[.,]62|23[хx]|14[.,]5)/i.test(l))
+            .join(" ");
+    }
+    const weaponStr = normalizeVutsonWeaponLine(textToScanWeapon);
+
+    // 10. ВИСОТА
+    let height = 100;
+    if (parsed["Висота"] !== "" && parsed["Висота"] !== undefined && !isNaN(parsed["Висота"])) {
+        height = parseInt(parsed["Висота"], 10);
+    } else {
+        const hM = fullText.match(/(?:Висота[:\s\-]*|(?:^|[\s,;.\-])В\s*[:\-])\s*(\d+)/i);
+        if (hM) height = parseInt(hM[1], 10);
+    }
+    if (isNaN(height) || height < 100) {
+        height = 100;
+    }
+    const heightStr = String(height).slice(0, 4);
+
+    // 11. ОПИС
+    const az = (parsed["Азимут"] !== "" && parsed["Азимут"] !== undefined) ? parsed["Азимут"] : 0;
+    const dist = (parsed["Дальність"] !== "" && parsed["Дальність"] !== undefined) ? parsed["Дальність"] : 0;
+    const kurs = (parsed["Курс"] !== "" && parsed["Курс"] !== undefined) ? parsed["Курс"] : 0;
+    const actionWord = (resultStr === "ЗНИЩЕНО") ? "ЗНИЩЕНО" : "обстріляно";
+
+    let targetType = "1 БПЛА Shahed";
+    const rawTargetType = (parsed["Тип цілі"] || "").toLowerCase();
+    const fullLower = fullText.toLowerCase();
+
+    if (/гербер/i.test(rawTargetType) || /гербер/i.test(fullLower)) {
+        targetType = "1 БПЛА Гербера";
+    } else if (/геран/i.test(rawTargetType) || /геран/i.test(fullLower)) {
+        if (/реакт/i.test(rawTargetType) || /реакт/i.test(fullLower)) {
+            targetType = "1 БПЛА Герань (реактивний)";
+        } else {
+            targetType = "1 БПЛА Герань";
+        }
+    } else if (/fpv|фпв/i.test(rawTargetType) || /fpv|фпв/i.test(fullLower)) {
+        targetType = "1 БПЛА FPV";
+    } else if (/zala|зала/i.test(rawTargetType) || /zala|зала/i.test(fullLower)) {
+        targetType = "1 БПЛА Zala";
+    } else if (/ланцет|lancet/i.test(rawTargetType) || /ланцет|lancet/i.test(fullLower)) {
+        targetType = "1 БПЛА Lancet";
+    } else if (/орлан|orlan/i.test(rawTargetType) || /орлан|orlan/i.test(fullLower)) {
+        targetType = "1 БПЛА Орлан-10";
+    } else if (/суперкам|supercam/i.test(rawTargetType) || /суперкам|supercam/i.test(fullLower)) {
+        targetType = "1 БПЛА Supercam";
+    } else if (/(?:^|[^а-яіїєґa-z0-9])кр(?:[^а-яіїєґa-z0-9]|$)/i.test(rawTargetType) || /(?:^|[^а-яіїєґa-z0-9])1\s*кр(?:[^а-яіїєґa-z0-9]|$)/i.test(fullLower)) {
+        targetType = "1 КР";
+    } else if (/невідом/i.test(rawTargetType)) {
+        targetType = "1 БПЛА Невідомий";
+    } else if (/shahed|шахед/i.test(rawTargetType) || /shahed|шахед/i.test(fullLower)) {
+        if (/реакт/i.test(rawTargetType) || /реакт/i.test(fullLower)) {
+            targetType = "1 БПЛА Shahed (реактивний)";
+        } else {
+            targetType = "1 БПЛА Shahed";
+        }
+    } else if (/реактивн/i.test(rawTargetType) || /реактивн/i.test(fullLower)) {
+        targetType = "1 БПЛА Shahed (реактивний)";
+    }
+
+    const personnel = extractPersonnel(fullText, lines);
+    const personnelStr = personnel.length > 0 ? `, ${personnel.join(", ")}` : "";
+
+    const opisStr = `А-${az}, Д-${dist}, К-${kurs}, ${actionWord} ${targetType}${personnelStr}`;
+
+    // 12. КОМЕНТАР
+    let commentStr = "-";
+    const commentM = fullText.match(/(?:^|\n)\s*Коментар[:\s]+([^\n\r]+)/i);
+    if (commentM) {
+        const cVal = cleanVal(commentM[1]);
+        if (cVal && cVal !== "-") commentStr = cVal;
+    }
+    const trajectoryM = fullText.match(/(?:Йшов\s+з[^\n\r]+|розвернувся[^\n\r]+)/i);
+    if (trajectoryM) {
+        if (commentStr === "-") commentStr = trajectoryM[0].trim();
+        else if (!commentStr.includes(trajectoryM[0].trim())) {
+            commentStr += "\n" + trajectoryM[0].trim();
+        }
+    }
+    if (commentStr === "-" && parsed["Коментар"]) {
+        commentStr = parsed["Коментар"];
+    }
+
+    // 13. БОЄПРИПАСИ
+    const ammoLines = [];
+    const ammoData = parseAmmo(fullText, lines);
+
+    if (ammoData["ЗКР Stinger"] || ammoData["ЗКР Ігла"]) {
+        const zkr = ammoData["ЗКР Stinger"] || ammoData["ЗКР Ігла"];
+        ammoLines.push(`Розхід ЗКР - ${zkr}`);
+    }
+    if (ammoData["НБЖ Stinger"] || ammoData["НБЖ Ігла"]) {
+        const nbzh = ammoData["НБЖ Stinger"] || ammoData["НБЖ Ігла"];
+        ammoLines.push(`Розхід НБЖ - ${nbzh}`);
+    }
+    if (ammoData["23х152 ОФЗ"]) {
+        ammoLines.push(`Набій 23х152 мм (ЗУ-23-2) ОФЗ - ${ammoData["23х152 ОФЗ"]}`);
+    }
+    if (ammoData["23х152 БЗТ"]) {
+        ammoLines.push(`Набій 23х152 мм (ЗУ-23-2) БЗТ - ${ammoData["23х152 БЗТ"]}`);
+    }
+    if (ammoData["14,5х114 МДЗ"] || ammoData["14,5х114 БЗТ"] || ammoData["14,5х114 Б-32"]) {
+        const total14 = (ammoData["14,5х114 МДЗ"] || 0) + (ammoData["14,5х114 БЗТ"] || 0) + (ammoData["14,5х114 Б-32"] || 0);
+        ammoLines.push(`Набій 14,5х114 мм (ЗПУ, КПВТ) - ${total14}`);
+    } else {
+        const m14Direct = fullText.match(/14[.,]5\s*[хx×]\s*114[^\d\n\r]*[\-–—:]\s*(\d+)/i);
+        if (m14Direct) {
+            ammoLines.push(`Набій 14,5х114 мм (ЗПУ, КПВТ) - ${parseInt(m14Direct[1], 10)}`);
+        }
+    }
+    if (ammoData["12,7х99"] !== "" && ammoData["12,7х99"] !== undefined) {
+        ammoLines.push(`Набій 12,7х99 мм (Canik, Browning) - ${ammoData["12,7х99"]}`);
+    } else if (/canik|browning|sar/i.test(weaponStr)) {
+        const m127Direct = fullText.match(/12[.,]7[^\d\n\r]*?[\-–—:]\s*(\d+)/i);
+        if (m127Direct) {
+            ammoLines.push(`Набій 12,7х99 мм (Canik, Browning) - ${parseInt(m127Direct[1], 10)}`);
+        }
+    }
+    if (ammoData["5,45 ПС"] !== "" && ammoData["5,45 ПС"] !== undefined && ammoData["5,45 Т"] !== "" && ammoData["5,45 Т"] !== undefined && (ammoData["5,45 Т"] > 0 || /ТЗ|ТР/i.test(fullText))) {
+        ammoLines.push(`Набій 5,45х39 мм ПС - ${ammoData["5,45 ПС"]}`);
+        ammoLines.push(`Набій 5,45х39 мм ТЗ - ${ammoData["5,45 Т"]}`);
+    } else if (ammoData["5,45 ПС"] !== "" && ammoData["5,45 ПС"] !== undefined) {
+        if (/ПС/i.test(fullText)) {
+            ammoLines.push(`Набій 5,45х39 мм ПС - ${ammoData["5,45 ПС"]}`);
+        } else {
+            ammoLines.push(`Набій 5,45х39 мм - ${ammoData["5,45 ПС"]}`);
+        }
+    }
+    if (ammoData["12x76"]) {
+        ammoLines.push(`Набій 12/76 мм - ${ammoData["12x76"]}`);
+    } else if (ammoData["12x70"]) {
+        ammoLines.push(`Набій 12/70 мм - ${ammoData["12x70"]}`);
+    }
+    if (ammoData["7,62 ПС"]) {
+        ammoLines.push(`Набій 7,62х39 мм - ${ammoData["7,62 ПС"]}`);
+    }
+
+    for (const l of lines) {
+        if (/^(?:Набій|Розхід|Росхід)/i.test(l)) {
+            let norm = l.replace(/[\u2013\u2014]/g, "-");
+            norm = norm.replace(/\s*-\s*/, " - ");
+            norm = norm.replace(/\s*шт\.?$/gi, "").trim();
+            norm = norm.replace(/^Росхід/i, "Розхід");
+            norm = norm.replace(/(?:^|[^а-яіїєґa-z0-9])Ндж(?:[^а-яіїєґa-z0-9]|$)/gi, (m) => m.replace(/Ндж/i, "НБЖ"));
+            const prefix = norm.split(" - ")[0].trim();
+            if (!ammoLines.some(al => al.split(" - ")[0].trim() === prefix)) {
+                ammoLines.push(norm);
+            }
+        }
+    }
+
+    const resultLines = [
+        `Дата: ${dateStr}`,
+        `Час: ${timeStr}`,
+        `№ цілі: ${targetNum}`,
+        `Результат: ${resultStr}`,
+        `Н.П.: ${settlement}`,
+        `Обл.: ${region}`,
+        `Підрозділ: ${unit}`,
+        `Позивний: ${callsign}`,
+        `Зброя: ${weaponStr}`,
+        `Висота: ${heightStr}`,
+        `Опис: ${opisStr}`,
+        `Коментар: ${commentStr}`
+    ];
+
+    if (ammoLines.length > 0) {
+        resultLines.push(...ammoLines);
+    }
+
+    return resultLines.join("\n");
+}
+
+function convertToVutson(block) {
+    if (isVutsonFormat(block)) {
+        return normalizeVutson(block);
+    }
+    return convertLegacyToVutson(block);
+}
+
+function convertAllToVutson(content) {
+    const blocks = splitFormulars(content);
+    return blocks.map(b => convertToVutson(b)).join("\n\n");
+}
+
 function parseAll(content) {
     const blocks = splitFormulars(content);
     return blocks.map(b => parseFormular(b));
@@ -1554,7 +2220,12 @@ if (typeof module !== "undefined" && module.exports) {
         parseFormularToList,
         parseFormularToCsv,
         parseAllToCsv,
-        generateXlsxBlob
+        generateXlsxBlob,
+        isVutsonFormat,
+        normalizeVutson,
+        convertLegacyToVutson,
+        convertToVutson,
+        convertAllToVutson
     };
 }
 
@@ -1570,7 +2241,12 @@ if (typeof globalThis !== "undefined") {
         parseFormularToList,
         parseFormularToCsv,
         parseAllToCsv,
-        generateXlsxBlob
+        generateXlsxBlob,
+        isVutsonFormat,
+        normalizeVutson,
+        convertLegacyToVutson,
+        convertToVutson,
+        convertAllToVutson
     };
 }
 
@@ -1610,8 +2286,14 @@ if (typeof require !== "undefined" && typeof module !== "undefined" && require.m
 // Elements
 const inputEl = document.getElementById('inputText');
 const btnParse = document.getElementById('btnParse');
+const btnVutson = document.getElementById('btnVutson');
 const btnClear = document.getElementById('btnClear');
 const resultsArea = document.getElementById('resultsArea');
+const vutsonArea = document.getElementById('vutsonArea');
+const vutsonText = document.getElementById('vutsonText');
+const vutsonRecordCount = document.getElementById('vutsonRecordCount');
+const btnCopyVutson = document.getElementById('btnCopyVutson');
+const btnCopyVutsonBottom = document.getElementById('btnCopyVutsonBottom');
 const tableHeaders = document.getElementById('tableHeaders');
 const tableBody = document.getElementById('tableBody');
 const tableRecordCount = document.getElementById('tableRecordCount');
@@ -1733,6 +2415,9 @@ btnClear.addEventListener('click', () => {
     inputEl.value = '';
     currentParsedRecords = [];
     resultsArea.style.display = 'none';
+    if (vutsonArea) vutsonArea.style.display = 'none';
+    if (vutsonText) vutsonText.value = '';
+    if (vutsonRecordCount) vutsonRecordCount.textContent = '';
     if (tableRecordCount) tableRecordCount.textContent = '';
     tableBody.innerHTML = '';
     csvOutput.textContent = '';
@@ -1867,6 +2552,51 @@ btnDownloadCsv.addEventListener('click', () => {
     URL.revokeObjectURL(url);
     showToast(`✓ Файл .csv завантажено (${count} рядків)`);
 });
+
+// VUTSON Actions
+function doVutson() {
+    const rawText = inputEl.value.trim();
+    if (!rawText) {
+        showToast('⚠️ Будь ласка, введіть або вставте текст формуляру');
+        inputEl.focus();
+        return;
+    }
+    const blocks = ppo.splitFormulars(rawText);
+    const converted = blocks.map(b => ppo.convertToVutson(b)).join('\n\n');
+    vutsonText.value = converted;
+    vutsonArea.style.display = 'block';
+    const count = blocks.length;
+    if (vutsonRecordCount) {
+        vutsonRecordCount.textContent = count === 1 ? '(1 формуляр)' : `(формулярів: ${count})`;
+    }
+    vutsonArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showToast(count === 1 ? '✓ Формуляр VUTSON сформовано!' : `✓ Формулярів VUTSON сформовано: ${count}!`);
+}
+
+async function copyVutsonText() {
+    const textToCopy = vutsonText.value;
+    if (!textToCopy) return;
+    try {
+        await navigator.clipboard.writeText(textToCopy);
+        showToast('✓ Текст VUTSON скопійовано в буфер обміну!');
+    } catch (err) {
+        vutsonText.select();
+        document.execCommand('copy');
+        showToast('✓ Текст VUTSON скопійовано в буфер обміну!');
+    }
+}
+
+if (btnVutson) {
+    btnVutson.addEventListener('click', doVutson);
+}
+
+if (btnCopyVutson) {
+    btnCopyVutson.addEventListener('click', copyVutsonText);
+}
+
+if (btnCopyVutsonBottom) {
+    btnCopyVutsonBottom.addEventListener('click', copyVutsonText);
+}
 
 // Initialize table header on load
 initTableHeader();
