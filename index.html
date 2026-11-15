@@ -1386,12 +1386,13 @@ function normalizeVutsonWeaponLine(raw) {
     return weaponsList.length > 0 ? weaponsList.join(", ") : trimmed;
 }
 
-function normalizeVutsonOpis(val, isDestroyed) {
+function normalizeVutsonOpis(val, isDestroyed, commentText = "") {
     const adk = { А: "0", Д: "100", К: "0" };
     let rest = val.replace(/(^|[,;\s])([АДК])(?:(?:\s*[:\-–—]\s*(\d*))|(?:\s+(\d+)))(?=$|[,;\s])/gi, (match, separator, field, dashedValue, spacedValue) => {
         adk[field.toUpperCase()] = dashedValue || spacedValue || adk[field.toUpperCase()];
         return separator;
     }).replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
+    if (adk.Д === "0") adk.Д = "100";
     const rankPattern = '(?:п\\.?\\s*п[\\-.]?\\s*к|п[\\-.]\\s*к|м[\\-.]\\s*р|к[\\-.]\\s*н|ст\\.?\\s*л[\\-.]?\\s*т|л[\\-.]\\s*т|лейтенант|капітан|майор|полковник|підполковник|сержант|солдат|с[\\-.]?нт)';
     const personnelStart = rest.search(new RegExp('(?:[,;]\\s*|\\s+)(?=' + rankPattern + '\\s+[А-ЯЄІЇҐ])', 'i'));
     let personnel = "";
@@ -1404,12 +1405,10 @@ function normalizeVutsonOpis(val, isDestroyed) {
     }
 
     let action = isDestroyed ? "ЗНИЩЕНО" : "обстріляно";
-    rest = rest.replace(/^(обстріляно|знищено|вибух)(?=$|\s)/i, (match) => {
-        if (!isDestroyed) action = match.toLowerCase();
-        return "";
-    }).trim();
+    rest = rest.replace(/^(обстріляно|знищено|вибух)(?=$|\s)/i, "").trim();
 
-    let count = 1;
+    const commentTargetM = commentText.match(/(?:^|[\s,;])[-–—]?\s*(\d+)\s+(БПЛА(?:\s+[^,;]+)?|КР)(?=$|[,;])/i);
+    let count = commentTargetM ? parseInt(commentTargetM[1], 10) : 1;
     const countM = rest.match(/^(\d+)\b\s*/);
     if (countM) {
         count = parseInt(countM[1], 10);
@@ -1417,7 +1416,7 @@ function normalizeVutsonOpis(val, isDestroyed) {
     }
 
     const targetM = rest.match(/^(?:БПЛА(?:\s+[^,;]+)?|КР)(?=$|[\s,;])/i);
-    let target = targetM ? targetM[0].trim() : "";
+    let target = targetM ? targetM[0].trim() : commentTargetM ? commentTargetM[2].trim() : "";
     if (/^БПЛА$/i.test(target)) target = "БПЛА Герань";
     if (!target) target = "БПЛА Герань";
 
@@ -1643,7 +1642,7 @@ function normalizeVutson(block) {
     if (!targetStr) targetStr = "№ цілі: б/н";
     if (!resultStr) resultStr = "Результат: не знищено";
     const isDestroyed = resultStr === "Результат: ЗНИЩЕНО";
-    if (opisVal) opisStr = `Опис: ${normalizeVutsonOpis(opisVal, isDestroyed)}`;
+    if (opisVal) opisStr = `Опис: ${normalizeVutsonOpis(opisVal, isDestroyed, commentLines.join(" "))}`;
     if (personnelPending.length > 0 && opisStr) {
         const hasPeopleInOpis = /(?:солд|с-нт|лейт|кап|п[\-.]\s*п?[\-.]?\s*к|м[\-.]\s*р|майор|полковник|підполковник)/i.test(opisStr);
         if (!hasPeopleInOpis) {
@@ -1656,7 +1655,7 @@ function normalizeVutson(block) {
     if (!callsignStr) callsignStr = "Позивний: ";
     if (!weaponStr) weaponStr = "Зброя: зі стрілецької зброї 5.45/5.56";
     if (!heightStr) heightStr = "Висота: 100";
-    if (!opisStr) opisStr = `Опис: А-0, Д-0, К-0, ${isDestroyed ? "ЗНИЩЕНО" : "обстріляно"} 1 БПЛА Герань`;
+    if (!opisStr) opisStr = `Опис: А-0, Д-100, К-0, ${isDestroyed ? "ЗНИЩЕНО" : "обстріляно"} 1 БПЛА Герань`;
 
     const result = [
         dateStr,
@@ -1831,7 +1830,8 @@ function convertLegacyToVutson(block) {
 
     // 11. ОПИС
     const az = (parsed["Азимут"] !== "" && parsed["Азимут"] !== undefined) ? parsed["Азимут"] : 0;
-    const dist = (parsed["Дальність"] !== "" && parsed["Дальність"] !== undefined) ? parsed["Дальність"] : 100;
+    const rawDistance = parsed["Дальність"];
+    const dist = rawDistance !== "" && rawDistance !== undefined && rawDistance !== 0 && rawDistance !== "0" ? rawDistance : 100;
     const kurs = (parsed["Курс"] !== "" && parsed["Курс"] !== undefined) ? parsed["Курс"] : 0;
     const actionWord = (resultStr === "ЗНИЩЕНО") ? "ЗНИЩЕНО" : "обстріляно";
 
